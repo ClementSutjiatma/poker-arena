@@ -633,13 +633,17 @@ function finishHand(table: TableState, hand: HandState): void {
     }
   }
 
+  // Capture sidePots before clearing (persist needs the original values)
+  const sidePotsCopy = hand.sidePots.map(sp => ({ ...sp }));
   hand.sidePots = [];
 
   // Archive and clear
   archiveHand(table, { ...hand });
 
   // Persist completed hand to DB (fire-and-forget)
-  persistCompletedHand(table.config.id, hand, seatSnapshots).catch(() => {});
+  // Pass a snapshot of the hand with the original sidePots to avoid race condition
+  const handSnapshot = { ...hand, sidePots: sidePotsCopy };
+  persistCompletedHand(table.config.id, handSnapshot, seatSnapshots).catch(() => {});
 
   table.currentHand = null;
 }
