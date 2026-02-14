@@ -1,6 +1,6 @@
 import { Agent, TableConfig, TableState, TableSummary, LeaderboardEntry } from '../poker/types';
 import { createTable, getActiveSeats, seatAgent, removeAgent } from '../poker/table';
-import { startHand, processAction, getCurrentTurnSeat } from '../poker/hand-manager';
+import { startHand, processAction, getCurrentTurnSeat, completeShowdown } from '../poker/hand-manager';
 import { makeBotDecision, createBotAgent, BotStrategy } from './auto-players';
 import { persistSitDown, persistLeave } from '../db/persist';
 
@@ -13,6 +13,7 @@ const DEFAULT_TABLES: TableConfig[] = [
 
 const TURN_TIMEOUT_MS = 30_000;
 const BOT_DELAY_MS = 800;
+const SHOWDOWN_DISPLAY_MS = 3_000;
 
 class GameManager {
   tables: Map<string, TableState> = new Map();
@@ -86,7 +87,16 @@ class GameManager {
     }
 
     const hand = table.currentHand;
-    if (!hand || hand.phase === 'complete' || hand.phase === 'showdown') {
+    if (!hand || hand.phase === 'complete') {
+      return;
+    }
+
+    // Showdown phase: wait for display delay, then complete the hand
+    if (hand.phase === 'showdown') {
+      const elapsed = Date.now() - hand.lastActionAt;
+      if (elapsed >= SHOWDOWN_DISPLAY_MS) {
+        completeShowdown(table, hand);
+      }
       return;
     }
 

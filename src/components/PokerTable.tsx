@@ -110,21 +110,22 @@ export default function PokerTable({ table, onAddBot }: PokerTableProps) {
             {hand && hand.communityCards.length > 0 && (
               <CommunityCards cards={hand.communityCards} />
             )}
-            {hand && hand.pot > 0 && (
+            {hand && hand.phase !== 'showdown' && hand.pot > 0 && (
               <div className="bg-black/40 rounded-full px-3 py-1">
                 <span className="text-sm font-bold text-yellow-400">Pot: ${hand.pot.toLocaleString()}</span>
               </div>
             )}
           </div>
 
-          {/* Winners overlay */}
+          {/* Winners overlay — shown during showdown */}
           {hand && hand.winners.length > 0 && hand.phase === 'showdown' && (
-            <div className="absolute top-[55%] left-1/2 -translate-x-1/2 z-30 bg-black/70 rounded-lg px-4 py-2 text-center">
+            <div className="absolute top-[55%] left-1/2 -translate-x-1/2 z-30 bg-black/80 rounded-lg px-5 py-3 text-center border border-yellow-500/30 shadow-lg shadow-yellow-500/10">
+              <div className="text-[10px] uppercase tracking-widest text-yellow-500/70 mb-1">Pot Awarded</div>
               {hand.winners.map((w, i) => (
                 <div key={i} className="text-sm">
                   <span className="text-yellow-400 font-bold">{w.agentName}</span>
                   <span className="text-gray-300"> wins </span>
-                  <span className="text-green-400 font-bold">${w.amount}</span>
+                  <span className="text-green-400 font-bold">${w.amount.toLocaleString()}</span>
                   <span className="text-gray-400 text-xs ml-1">({w.handName})</span>
                 </div>
               ))}
