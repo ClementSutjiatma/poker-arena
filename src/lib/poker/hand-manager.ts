@@ -323,18 +323,19 @@ export function processAction(
   // Check if hand is over (only one player left)
   const playersInHand = getPlayersStillInHand(table);
   if (playersInHand.length === 1) {
-    // Award pot to winner
+    // Award pot to winner — go through showdown phase so frontend can display it
     const winner = playersInHand[0];
     winner.stack += hand.pot;
     winner.agent!.handsWon++;
+    hand.phase = 'showdown';
     hand.winners = [{
       agentId: winner.agent!.id,
       agentName: winner.agent!.name,
       amount: hand.pot,
       handName: 'Last player standing',
     }];
-    hand.pot = 0;
-    finishHand(table, hand);
+    // Keep hand.pot visible for the showdown display — completeShowdown will clear it
+    hand.lastActionAt = Date.now();
     return true;
   }
 
@@ -444,8 +445,8 @@ function doShowdown(table: TableState, hand: HandState): void {
       amount: hand.pot,
       handName: 'Last player standing',
     }];
-    hand.pot = 0;
-    finishHand(table, hand);
+    // Keep hand.pot visible for the showdown display — it will be cleared by completeShowdown
+    hand.lastActionAt = Date.now();
     return;
   }
 
@@ -487,6 +488,28 @@ function doShowdown(table: TableState, hand: HandState): void {
     }
   }
 
+  // Chip conservation check: stacks + pot should equal starting total
+  const internal = hand as HandStateInternal;
+  if (internal._startingStacks) {
+    const startingTotal = Object.values(internal._startingStacks).reduce((sum, s) => sum + s, 0);
+    const currentTotal = getActiveSeats(table).reduce((sum, s) => sum + s.stack, 0);
+    if (currentTotal !== startingTotal) {
+      console.error(
+        `[Poker] Chip conservation error in hand ${hand.id}: ` +
+        `starting=${startingTotal}, current stacks=${currentTotal}, delta=${currentTotal - startingTotal}`
+      );
+    }
+  }
+
+  // Keep hand.pot visible for the showdown display — it will be cleared by completeShowdown
+  hand.lastActionAt = Date.now();
+}
+
+/**
+ * Finish the showdown phase: zero out pot and complete the hand.
+ * Called by the game loop after a delay so the frontend can display winners.
+ */
+export function completeShowdown(table: TableState, hand: HandState): void {
   hand.pot = 0;
   finishHand(table, hand);
 }
@@ -494,34 +517,33 @@ function doShowdown(table: TableState, hand: HandState): void {
 function calculateSidePots(table: TableState, hand: HandState): SidePot[] {
   const playersInHand = getPlayersStillInHand(table);
 
-  // Collect all bets placed during the hand (from actions)
-  // We compute total contributions from each player across all rounds
-  const contributions = new Map<string, number>();
-  for (const action of hand.actions) {
-    if (action.action !== 'fold') {
-      contributions.set(action.agentId, action.amount); // amount field stores cumulative bet for the round
-    }
-  }
-
-  // Actually, let's use a simpler approach: compute from the total pot.
-  // Reconstruct total bets per player from all actions.
-  const totalBets = new Map<string, { total: number; seatNumber: number }>();
-  const roundBets = new Map<string, number>();
+  // Reconstruct total contributions per player from actions.
+  // Each action's amount is the player's cumulative bet for that round.
+  // We take the max amount per (agentId, round) then sum across rounds.
+  const roundBets = new Map<string, Map<string, number>>(); // agentId -> round -> amount
 
   for (const action of hand.actions) {
     if (action.action === 'fold') continue;
-    roundBets.set(`${action.agentId}_${action.round}`, action.amount);
+    if (!roundBets.has(action.agentId)) {
+      roundBets.set(action.agentId, new Map());
+    }
+    const rounds = roundBets.get(action.agentId)!;
+    const current = rounds.get(action.round) ?? 0;
+    if (action.amount > current) {
+      rounds.set(action.round, action.amount);
+    }
   }
 
   // Sum up round bets for each player
-  for (const [key, amount] of roundBets) {
-    const agentId = key.split('_')[0];
+  const totalBets = new Map<string, { total: number; seatNumber: number }>();
+  for (const [agentId, rounds] of roundBets) {
+    let total = 0;
+    for (const [, amount] of rounds) {
+      total += amount;
+    }
     const seat = playersInHand.find(s => s.agent!.id === agentId)
       ?? table.seats.find(s => s.agent?.id === agentId);
-    if (!totalBets.has(agentId)) {
-      totalBets.set(agentId, { total: 0, seatNumber: seat?.seatNumber ?? 0 });
-    }
-    totalBets.get(agentId)!.total += amount;
+    totalBets.set(agentId, { total, seatNumber: seat?.seatNumber ?? 0 });
   }
 
   // If no all-ins, single pot
