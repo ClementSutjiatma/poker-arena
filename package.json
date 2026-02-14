@@ -10,11 +10,16 @@
     "db:seed": "tsx src/lib/db/seed.ts"
   },
   "dependencies": {
+    "@privy-io/node": "^0.9.0",
     "@privy-io/react-auth": "^3.13.1",
+    "@privy-io/wagmi": "^4.0.1",
     "@supabase/supabase-js": "^2",
+    "@tanstack/react-query": "^5.90.21",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "viem": "^2.45.3",
+    "wagmi": "^3.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

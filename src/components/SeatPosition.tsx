@@ -21,6 +21,10 @@ interface SeatPositionProps {
   isSmallBlind: boolean;
   position: { top: string; left: string };
   betPosition: { top: string; left: string };
+  /** If set, empty seats are clickable and will call this with the seat number. */
+  onSeatClick?: (seatNumber: number) => void;
+  /** True if this seat belongs to the current user. */
+  isLocalPlayer?: boolean;
 }
 
 export default function SeatPosition({
@@ -31,6 +35,8 @@ export default function SeatPosition({
   isSmallBlind,
   position,
   betPosition,
+  onSeatClick,
+  isLocalPlayer,
 }: SeatPositionProps) {
   const isEmpty = !seat.agent;
 
@@ -56,18 +62,27 @@ export default function SeatPosition({
           className={`
             relative rounded-xl px-3 py-2 min-w-[100px] text-center border-2 transition-all duration-200
             ${isEmpty
-              ? 'bg-gray-800/40 border-gray-700/40'
-              : seat.hasFolded
-                ? 'bg-gray-800/60 border-gray-600/40 opacity-50'
-                : seat.isAllIn
-                  ? 'bg-red-900/60 border-red-500/80 shadow-lg shadow-red-500/20'
+              ? onSeatClick
+                ? 'bg-gray-800/40 border-emerald-500/40 hover:border-emerald-400 hover:bg-gray-800/60 cursor-pointer'
+                : 'bg-gray-800/40 border-gray-700/40'
+              : isLocalPlayer
+                ? seat.hasFolded
+                  ? 'bg-gray-800/60 border-gray-600/40 opacity-50'
                   : isCurrentTurn
-                    ? 'bg-gray-800/80 border-amber-400 shadow-lg shadow-amber-400/30 animate-pulse'
-                    : seat.isSittingOut
-                      ? 'bg-gray-800/40 border-gray-600/40 opacity-60'
-                      : 'bg-gray-800/80 border-gray-600/60'
+                    ? 'bg-blue-900/60 border-blue-400 shadow-lg shadow-blue-400/30 animate-pulse'
+                    : 'bg-blue-900/40 border-blue-500/60'
+                : seat.hasFolded
+                  ? 'bg-gray-800/60 border-gray-600/40 opacity-50'
+                  : seat.isAllIn
+                    ? 'bg-red-900/60 border-red-500/80 shadow-lg shadow-red-500/20'
+                    : isCurrentTurn
+                      ? 'bg-gray-800/80 border-amber-400 shadow-lg shadow-amber-400/30 animate-pulse'
+                      : seat.isSittingOut
+                        ? 'bg-gray-800/40 border-gray-600/40 opacity-60'
+                        : 'bg-gray-800/80 border-gray-600/60'
             }
           `}
+          onClick={isEmpty && onSeatClick ? () => onSeatClick(seat.seatNumber) : undefined}
         >
           {/* Badges */}
           <div className="absolute -top-2 left-1/2 -translate-x-1/2 flex gap-1">
@@ -80,10 +95,15 @@ export default function SeatPosition({
             {isBigBlind && (
               <span className="px-1.5 py-0.5 text-[10px] font-bold bg-orange-500 text-white rounded-full leading-none">BB</span>
             )}
+            {isLocalPlayer && !isEmpty && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-500 text-white rounded-full leading-none">YOU</span>
+            )}
           </div>
 
           {isEmpty ? (
-            <div className="text-gray-500 text-xs py-1">Empty</div>
+            <div className={`text-xs py-1 ${onSeatClick ? 'text-emerald-400' : 'text-gray-500'}`}>
+              {onSeatClick ? 'Sit Here' : 'Empty'}
+            </div>
           ) : (
             <>
               {/* Agent name */}

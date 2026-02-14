@@ -47,6 +47,7 @@ export async function GET(
       smallBlindSeatNumber: hand.smallBlindSeatNumber,
       bigBlindSeatNumber: hand.bigBlindSeatNumber,
       currentBet: hand.currentBet,
+      minRaise: hand.minRaise,
       winners: hand.winners,
       startedAt: hand.startedAt,
       completedAt: hand.completedAt,

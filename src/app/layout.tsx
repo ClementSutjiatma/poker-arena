@@ -3,6 +3,7 @@ import { Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import Providers from "./providers";
 import AuthButton from "@/components/AuthButton";
+import OnboardingGate from "@/components/OnboardingGate";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -44,6 +45,7 @@ export default function RootLayout({
               </nav>
             </div>
           </header>
+          <OnboardingGate />
           <main className="max-w-7xl mx-auto px-4 py-6">
             {children}
           </main>

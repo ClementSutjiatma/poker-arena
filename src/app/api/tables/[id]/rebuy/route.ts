@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getGameManager } from '@/lib/game/game-manager';
+import { persistBotRebuy } from '@/lib/db/persist';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,22 +10,24 @@ export async function POST(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { seatNumber, buyInAmount, agentName, privyUserId, walletAddress, depositTxHash } = body;
+  const { agentId, amount } = body;
 
-  if (typeof seatNumber !== 'number' || typeof buyInAmount !== 'number' || typeof agentName !== 'string') {
-    return NextResponse.json({ error: 'Missing required fields: seatNumber, buyInAmount, agentName' }, { status: 400 });
+  if (!agentId || typeof amount !== 'number' || amount <= 0) {
+    return NextResponse.json({ error: 'Missing agentId or invalid amount' }, { status: 400 });
   }
 
   const gm = getGameManager();
-  const result = gm.sitAgent(id, seatNumber, agentName, buyInAmount, privyUserId, walletAddress);
+  const result = gm.rebuyAgent(id, agentId, amount);
 
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
+  // Record the rebuy in DB
+  persistBotRebuy(agentId, id, amount).catch(() => {});
+
   return NextResponse.json({
     success: true,
-    agent: result.agent,
-    ...(depositTxHash ? { depositTxHash } : {}),
+    newStack: result.newStack,
   });
 }

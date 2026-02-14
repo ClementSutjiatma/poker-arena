@@ -1,8 +1,13 @@
 'use client';
 
 import { PrivyProvider } from '@privy-io/react-auth';
+import { WagmiProvider } from '@privy-io/wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { wagmiConfig } from '@/lib/blockchain/wagmi-config';
+import { tempoTestnet } from '@/lib/blockchain/chain-config';
 
 const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+const queryClient = new QueryClient();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   // During SSR prerender on Vercel, the env var may not be available.
@@ -24,12 +29,18 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         loginMethods: ['google', 'email'],
         embeddedWallets: {
           ethereum: {
-            createOnLogin: 'off',
+            createOnLogin: 'users-without-wallets',
           },
         },
+        defaultChain: tempoTestnet,
+        supportedChains: [tempoTestnet],
       }}
     >
-      {children}
+      <QueryClientProvider client={queryClient}>
+        <WagmiProvider config={wagmiConfig}>
+          {children}
+        </WagmiProvider>
+      </QueryClientProvider>
     </PrivyProvider>
   );
 }
