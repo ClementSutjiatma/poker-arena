@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { CommunityCards } from './Card';
 import SeatPosition from './SeatPosition';
 import ActionLog from './ActionLog';
+import PlayerControls from './PlayerControls';
+import BuyInModal from './BuyInModal';
 
 // 6-seat positions arranged around an oval table
 // Positions are percentages relative to the table container
@@ -26,7 +29,7 @@ const BET_POSITIONS = [
 ];
 
 interface TableData {
-  config: { id: string; name: string; smallBlind: number; bigBlind: number };
+  config: { id: string; name: string; smallBlind: number; bigBlind: number; minBuyIn?: number; maxBuyIn?: number };
   seats: {
     seatNumber: number;
     agent: { id: string; name: string; type: string } | null;
@@ -50,6 +53,8 @@ interface TableData {
       timestamp: number;
     }[];
     currentTurnSeat: number | null;
+    currentBet: number;
+    minRaise: number;
     dealerSeatNumber: number;
     smallBlindSeatNumber: number;
     bigBlindSeatNumber: number;
@@ -63,6 +68,12 @@ interface PokerTableProps {
   onAddBot?: (strategy: string) => void;
   isAuthenticated?: boolean;
   onLogin?: () => void;
+  /** The agent ID of the local player (if seated at this table). */
+  localAgentId?: string | null;
+  /** Callback when player successfully sits down. */
+  onSit?: (agent: { id: string; name: string }) => void;
+  /** Callback when player successfully leaves. */
+  onLeave?: () => void;
 }
 
 const PHASE_DISPLAY: Record<string, string> = {
@@ -75,9 +86,63 @@ const PHASE_DISPLAY: Record<string, string> = {
   complete: 'Hand Complete',
 };
 
-export default function PokerTable({ table, onAddBot, isAuthenticated, onLogin }: PokerTableProps) {
+export default function PokerTable({
+  table,
+  onAddBot,
+  isAuthenticated,
+  onLogin,
+  localAgentId,
+  onSit,
+  onLeave,
+}: PokerTableProps) {
   const hand = table.currentHand;
   const hasEmptySeat = table.seats.some(s => !s.agent);
+
+  const [buyInModal, setBuyInModal] = useState<{ seatNumber: number; isRebuy: boolean } | null>(null);
+
+  // Find the local player's seat
+  const localSeat = localAgentId
+    ? table.seats.find(s => s.agent?.id === localAgentId)
+    : null;
+
+  const isLocalPlayerTurn = localSeat && hand?.currentTurnSeat === localSeat.seatNumber;
+  const isInActiveHand = localSeat && hand && hand.phase !== 'complete' && hand.phase !== 'waiting' && !localSeat.hasFolded;
+  const isBetweenHands = !hand || hand.phase === 'complete' || hand.phase === 'waiting';
+
+  // Calculate amount to call
+  const toCall = localSeat && hand
+    ? Math.min(hand.currentBet - localSeat.currentBet, localSeat.stack)
+    : 0;
+
+  const handleSeatClick = (seatNumber: number) => {
+    if (!isAuthenticated) {
+      onLogin?.();
+      return;
+    }
+    setBuyInModal({ seatNumber, isRebuy: false });
+  };
+
+  const handleAction = async (action: string, amount?: number) => {
+    if (!localAgentId) return;
+    try {
+      await fetch(`/api/tables/${table.config.id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: localAgentId, action, amount }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRebuy = () => {
+    if (!localSeat) return;
+    setBuyInModal({ seatNumber: localSeat.seatNumber, isRebuy: true });
+  };
+
+  // Table stakes (fallback to reasonable defaults based on blinds)
+  const minBuyIn = table.config.minBuyIn ?? table.config.bigBlind * 20;
+  const maxBuyIn = table.config.maxBuyIn ?? table.config.bigBlind * 100;
 
   return (
     <div className="flex flex-col lg:flex-row gap-4">
@@ -145,12 +210,14 @@ export default function PokerTable({ table, onAddBot, isAuthenticated, onLogin }
               isSmallBlind={hand?.smallBlindSeatNumber === i}
               position={SEAT_POSITIONS[i]}
               betPosition={BET_POSITIONS[i]}
+              onSeatClick={!localAgentId && isAuthenticated ? handleSeatClick : undefined}
+              isLocalPlayer={seat.agent?.id === localAgentId}
             />
           ))}
         </div>
 
-        {/* Add bot buttons — gated behind authentication */}
-        {hasEmptySeat && (
+        {/* Add bot buttons — only when authenticated and not seated */}
+        {hasEmptySeat && !localAgentId && (
           <div className="flex items-center gap-2 mt-4 justify-center">
             {isAuthenticated && onAddBot ? (
               <>
@@ -159,35 +226,56 @@ export default function PokerTable({ table, onAddBot, isAuthenticated, onLogin }
                   onClick={() => onAddBot('house_fish')}
                   className="px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition cursor-pointer"
                 >
-                  🐟 Fish
+                  Fish
                 </button>
                 <button
                   onClick={() => onAddBot('house_tag')}
                   className="px-3 py-1.5 text-xs font-medium bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition cursor-pointer"
                 >
-                  🦈 TAG
+                  TAG
                 </button>
                 <button
                   onClick={() => onAddBot('house_lag')}
                   className="px-3 py-1.5 text-xs font-medium bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition cursor-pointer"
                 >
-                  🔥 LAG
+                  LAG
                 </button>
               </>
-            ) : (
+            ) : !isAuthenticated ? (
               <button
                 onClick={onLogin}
                 className="px-4 py-2 text-sm font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition cursor-pointer"
               >
                 Sign in to play
               </button>
-            )}
+            ) : null}
           </div>
         )}
       </div>
 
-      {/* Action log sidebar */}
-      <div className="w-full lg:w-72 shrink-0">
+      {/* Sidebar: action log + player controls */}
+      <div className="w-full lg:w-72 shrink-0 flex flex-col gap-3">
+        {/* Player controls (only when seated) */}
+        {localSeat && localAgentId && (
+          <PlayerControls
+            tableId={table.config.id}
+            agentId={localAgentId}
+            stack={localSeat.stack}
+            toCall={toCall}
+            currentBet={hand?.currentBet ?? 0}
+            bigBlind={table.config.bigBlind}
+            minRaise={hand?.minRaise ?? table.config.bigBlind * 2}
+            isMyTurn={!!isLocalPlayerTurn}
+            isInHand={!!isInActiveHand}
+            isBetweenHands={isBetweenHands}
+            maxBuyIn={maxBuyIn}
+            onAction={handleAction}
+            onLeave={() => onLeave?.()}
+            onRebuy={handleRebuy}
+          />
+        )}
+
+        {/* Action log */}
         {hand ? (
           <ActionLog actions={hand.actions} />
         ) : (
@@ -197,6 +285,25 @@ export default function PokerTable({ table, onAddBot, isAuthenticated, onLogin }
           </div>
         )}
       </div>
+
+      {/* Buy-in modal */}
+      {buyInModal && (
+        <BuyInModal
+          tableId={table.config.id}
+          seatNumber={buyInModal.seatNumber}
+          minBuyIn={minBuyIn}
+          maxBuyIn={maxBuyIn}
+          isRebuy={buyInModal.isRebuy}
+          currentStack={localSeat?.stack}
+          onClose={() => setBuyInModal(null)}
+          onSuccess={(agent) => {
+            setBuyInModal(null);
+            if (!buyInModal.isRebuy) {
+              onSit?.(agent);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

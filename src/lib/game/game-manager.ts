@@ -163,7 +163,7 @@ class GameManager {
     return this.tables.get(id);
   }
 
-  sitAgent(tableId: string, seatNumber: number, agentName: string, buyInAmount: number, privyUserId?: string): { success: boolean; error?: string; agent?: Agent } {
+  sitAgent(tableId: string, seatNumber: number, agentName: string, buyInAmount: number, privyUserId?: string, walletAddress?: string): { success: boolean; error?: string; agent?: Agent } {
     const table = this.tables.get(tableId);
     if (!table) return { success: false, error: 'Table not found' };
 
@@ -179,6 +179,7 @@ class GameManager {
       totalProfit: 0,
       handsPlayed: 0,
       handsWon: 0,
+      walletAddress,
     };
 
     if (!seatAgent(table, seatNumber, agent, buyInAmount)) {
@@ -231,7 +232,7 @@ class GameManager {
     return { success: true };
   }
 
-  leaveAgent(tableId: string, agentId: string): { success: boolean; error?: string; cashOut?: number } {
+  leaveAgent(tableId: string, agentId: string): { success: boolean; error?: string; cashOut?: number; walletAddress?: string } {
     const table = this.tables.get(tableId);
     if (!table) return { success: false, error: 'Table not found' };
     const seat = table.seats.find(s => s.agent?.id === agentId);
@@ -243,11 +244,33 @@ class GameManager {
     }
 
     const cashOut = seat.stack;
+    const walletAddress = seat.agent?.walletAddress;
     const agent = removeAgent(table, seat.seatNumber);
     if (agent) {
       persistLeave(agent.id, tableId, cashOut, agent.totalProfit).catch(() => {});
     }
-    return { success: true, cashOut };
+    return { success: true, cashOut, walletAddress };
+  }
+
+  rebuyAgent(tableId: string, agentId: string, amount: number): { success: boolean; error?: string; newStack?: number } {
+    const table = this.tables.get(tableId);
+    if (!table) return { success: false, error: 'Table not found' };
+    const seat = table.seats.find(s => s.agent?.id === agentId);
+    if (!seat || !seat.agent) return { success: false, error: 'Agent not at this table' };
+
+    // Can't rebuy mid-hand
+    if (table.currentHand && table.currentHand.phase !== 'complete' && !seat.hasFolded && !seat.isSittingOut) {
+      return { success: false, error: 'Cannot rebuy during an active hand' };
+    }
+
+    // Enforce max buy-in cap
+    if (seat.stack + amount > table.config.maxBuyIn) {
+      return { success: false, error: `Rebuy would exceed max buy-in of ${table.config.maxBuyIn}` };
+    }
+
+    seat.stack += amount;
+    seat.buyIn += amount;
+    return { success: true, newStack: seat.stack };
   }
 
   submitAction(tableId: string, agentId: string, action: string, amount?: number): { success: boolean; error?: string } {

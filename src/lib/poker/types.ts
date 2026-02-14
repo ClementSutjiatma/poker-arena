@@ -71,6 +71,8 @@ export interface Agent {
   totalProfit: number;
   handsPlayed: number;
   handsWon: number;
+  /** Wallet address for on-chain escrow settlement (human players only). */
+  walletAddress?: string;
 }
 
 export interface Seat {

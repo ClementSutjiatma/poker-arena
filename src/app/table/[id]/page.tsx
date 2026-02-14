@@ -7,7 +7,7 @@ import PokerTable from '@/components/PokerTable';
 import Link from 'next/link';
 
 interface TableData {
-  config: { id: string; name: string; smallBlind: number; bigBlind: number };
+  config: { id: string; name: string; smallBlind: number; bigBlind: number; minBuyIn?: number; maxBuyIn?: number };
   seats: {
     seatNumber: number;
     agent: { id: string; name: string; type: string } | null;
@@ -31,6 +31,8 @@ interface TableData {
       timestamp: number;
     }[];
     currentTurnSeat: number | null;
+    currentBet: number;
+    minRaise: number;
     dealerSeatNumber: number;
     smallBlindSeatNumber: number;
     bigBlindSeatNumber: number;
@@ -45,20 +47,30 @@ export default function TablePage() {
   const { authenticated, login } = usePrivy();
   const [table, setTable] = useState<TableData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [localAgentId, setLocalAgentId] = useState<string | null>(null);
 
   const fetchTable = useCallback(async () => {
     try {
       const res = await fetch(`/api/tables/${id}`);
       if (res.ok) {
-        setTable(await res.json());
+        const data: TableData = await res.json();
+        setTable(data);
         setError(null);
+
+        // If we have a localAgentId, verify the agent is still at the table
+        if (localAgentId) {
+          const stillSeated = data.seats.some(s => s.agent?.id === localAgentId);
+          if (!stillSeated) {
+            setLocalAgentId(null);
+          }
+        }
       } else {
         setError('Table not found');
       }
     } catch {
       setError('Failed to load table');
     }
-  }, [id]);
+  }, [id, localAgentId]);
 
   useEffect(() => {
     fetchTable();
@@ -77,6 +89,14 @@ export default function TablePage() {
     } catch {
       // ignore
     }
+  };
+
+  const handleSit = (agent: { id: string; name: string }) => {
+    setLocalAgentId(agent.id);
+  };
+
+  const handleLeave = () => {
+    setLocalAgentId(null);
   };
 
   if (error) {
@@ -110,6 +130,9 @@ export default function TablePage() {
         onAddBot={handleAddBot}
         isAuthenticated={authenticated}
         onLogin={login}
+        localAgentId={localAgentId}
+        onSit={handleSit}
+        onLeave={handleLeave}
       />
     </div>
   );
