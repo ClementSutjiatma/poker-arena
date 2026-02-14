@@ -61,6 +61,8 @@ interface TableData {
 interface PokerTableProps {
   table: TableData;
   onAddBot?: (strategy: string) => void;
+  isAuthenticated?: boolean;
+  onLogin?: () => void;
 }
 
 const PHASE_DISPLAY: Record<string, string> = {
@@ -73,7 +75,7 @@ const PHASE_DISPLAY: Record<string, string> = {
   complete: 'Hand Complete',
 };
 
-export default function PokerTable({ table, onAddBot }: PokerTableProps) {
+export default function PokerTable({ table, onAddBot, isAuthenticated, onLogin }: PokerTableProps) {
   const hand = table.currentHand;
   const hasEmptySeat = table.seats.some(s => !s.agent);
 
@@ -146,28 +148,39 @@ export default function PokerTable({ table, onAddBot }: PokerTableProps) {
           ))}
         </div>
 
-        {/* Add bot buttons */}
-        {hasEmptySeat && onAddBot && (
+        {/* Add bot buttons — gated behind authentication */}
+        {hasEmptySeat && (
           <div className="flex items-center gap-2 mt-4 justify-center">
-            <span className="text-sm text-gray-400">Add Bot:</span>
-            <button
-              onClick={() => onAddBot('house_fish')}
-              className="px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition"
-            >
-              🐟 Fish
-            </button>
-            <button
-              onClick={() => onAddBot('house_tag')}
-              className="px-3 py-1.5 text-xs font-medium bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition"
-            >
-              🦈 TAG
-            </button>
-            <button
-              onClick={() => onAddBot('house_lag')}
-              className="px-3 py-1.5 text-xs font-medium bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition"
-            >
-              🔥 LAG
-            </button>
+            {isAuthenticated && onAddBot ? (
+              <>
+                <span className="text-sm text-gray-400">Add Bot:</span>
+                <button
+                  onClick={() => onAddBot('house_fish')}
+                  className="px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition cursor-pointer"
+                >
+                  🐟 Fish
+                </button>
+                <button
+                  onClick={() => onAddBot('house_tag')}
+                  className="px-3 py-1.5 text-xs font-medium bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition cursor-pointer"
+                >
+                  🦈 TAG
+                </button>
+                <button
+                  onClick={() => onAddBot('house_lag')}
+                  className="px-3 py-1.5 text-xs font-medium bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition cursor-pointer"
+                >
+                  🔥 LAG
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onLogin}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition cursor-pointer"
+              >
+                Sign in to play
+              </button>
+            )}
           </div>
         )}
       </div>

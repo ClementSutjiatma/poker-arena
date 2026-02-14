@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 import PokerTable from '@/components/PokerTable';
 import Link from 'next/link';
 
@@ -41,6 +42,7 @@ interface TableData {
 export default function TablePage() {
   const params = useParams();
   const id = params.id as string;
+  const { authenticated, login } = usePrivy();
   const [table, setTable] = useState<TableData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +105,12 @@ export default function TablePage() {
           &larr; Back to Lobby
         </Link>
       </div>
-      <PokerTable table={table} onAddBot={handleAddBot} />
+      <PokerTable
+        table={table}
+        onAddBot={handleAddBot}
+        isAuthenticated={authenticated}
+        onLogin={login}
+      />
     </div>
   );
 }

@@ -152,12 +152,17 @@ class GameManager {
     return this.tables.get(id);
   }
 
-  sitAgent(tableId: string, seatNumber: number, agentName: string, buyInAmount: number): { success: boolean; error?: string; agent?: Agent } {
+  sitAgent(tableId: string, seatNumber: number, agentName: string, buyInAmount: number, privyUserId?: string): { success: boolean; error?: string; agent?: Agent } {
     const table = this.tables.get(tableId);
     if (!table) return { success: false, error: 'Table not found' };
 
+    // Use Privy user ID for deterministic, non-guessable agent IDs when available
+    const agentId = privyUserId
+      ? `agent_${privyUserId}_${Date.now()}`
+      : `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
     const agent: Agent = {
-      id: `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: agentId,
       name: agentName,
       type: 'human',
       totalProfit: 0,

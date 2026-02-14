@@ -9,14 +9,14 @@ export async function POST(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { seatNumber, buyInAmount, agentName } = body;
+  const { seatNumber, buyInAmount, agentName, privyUserId } = body;
 
   if (typeof seatNumber !== 'number' || typeof buyInAmount !== 'number' || typeof agentName !== 'string') {
     return NextResponse.json({ error: 'Missing required fields: seatNumber, buyInAmount, agentName' }, { status: 400 });
   }
 
   const gm = getGameManager();
-  const result = gm.sitAgent(id, seatNumber, agentName, buyInAmount);
+  const result = gm.sitAgent(id, seatNumber, agentName, buyInAmount, privyUserId);
 
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
