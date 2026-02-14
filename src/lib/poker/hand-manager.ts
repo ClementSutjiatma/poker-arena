@@ -12,6 +12,7 @@ import {
 } from './types';
 import { evaluateHand, compareHands } from './hand-evaluator';
 import { getActiveSeats, getNextActiveSeat, archiveHand } from './table';
+import { persistCompletedHand, persistBotRebuy } from '../db/persist';
 
 let handIdCounter = 0;
 
@@ -68,6 +69,12 @@ export function startHand(table: TableState): HandState {
   // Deal hole cards to active seats
   for (const seat of activeSeats) {
     seat.holeCards = [deck[deckIndex++], deck[deckIndex++]];
+  }
+
+  // Capture starting stacks BEFORE blind posting (for DB persistence)
+  const startingStacks: Record<string, number> = {};
+  for (const seat of activeSeats) {
+    startingStacks[seat.agent!.id] = seat.stack;
   }
 
   // Post blinds
@@ -132,9 +139,10 @@ export function startHand(table: TableState): HandState {
     lastActionAt: now,
   };
 
-  // Attach remaining deck to hand via a side channel
+  // Attach remaining deck and starting stacks to hand via a side channel
   (hand as HandStateInternal)._deck = remainingDeck;
   (hand as HandStateInternal)._deckIndex = 0;
+  (hand as HandStateInternal)._startingStacks = startingStacks;
 
   table.currentHand = hand;
 
@@ -149,6 +157,7 @@ export function startHand(table: TableState): HandState {
 interface HandStateInternal extends HandState {
   _deck: Card[];
   _deckIndex: number;
+  _startingStacks: Record<string, number>;
 }
 
 function drawCard(hand: HandState): Card {
@@ -573,6 +582,20 @@ function finishHand(table: TableState, hand: HandState): void {
     }
   }
 
+  // Build seat snapshots for DB persistence BEFORE modifying stacks (rebuys)
+  const internal = hand as HandStateInternal;
+  const seatSnapshots = table.seats
+    .filter((s) => s.agent && internal._startingStacks?.[s.agent.id] !== undefined)
+    .map((s) => ({
+      agentId: s.agent!.id,
+      agent: { ...s.agent! },
+      seatNumber: s.seatNumber,
+      startingStack: internal._startingStacks[s.agent!.id],
+      endingStack: s.stack,
+      holeCards: [...s.holeCards],
+      hasFolded: s.hasFolded,
+    }));
+
   // Remove players with 0 chips (they bust out)
   for (const seat of table.seats) {
     if (seat.agent && seat.stack <= 0 && !seat.isSittingOut) {
@@ -580,6 +603,8 @@ function finishHand(table: TableState, hand: HandState): void {
       if (seat.agent.type !== 'human') {
         seat.stack = table.config.maxBuyIn;
         seat.buyIn += table.config.maxBuyIn;
+        // Persist bot rebuy
+        persistBotRebuy(seat.agent.id, table.config.id, table.config.maxBuyIn).catch(() => {});
       } else {
         seat.isSittingOut = true;
       }
@@ -590,5 +615,9 @@ function finishHand(table: TableState, hand: HandState): void {
 
   // Archive and clear
   archiveHand(table, { ...hand });
+
+  // Persist completed hand to DB (fire-and-forget)
+  persistCompletedHand(table.config.id, hand, seatSnapshots).catch(() => {});
+
   table.currentHand = null;
 }
