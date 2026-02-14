@@ -1,27 +1,29 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import { tableConfigs } from './schema';
+import { createClient } from '@supabase/supabase-js';
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  console.error('DATABASE_URL is required');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY are required');
   process.exit(1);
 }
 
-const client = postgres(connectionString, { prepare: false });
-const db = drizzle(client);
+const db = createClient(supabaseUrl, supabaseKey);
 
 async function seed() {
   console.log('Seeding table_configs...');
-  await db
-    .insert(tableConfigs)
-    .values([
-      { id: 'micro', name: 'Micro Stakes', smallBlind: 1, bigBlind: 2, minBuyIn: 40, maxBuyIn: 200, maxSeats: 6 },
-      { id: 'low', name: 'Low Stakes', smallBlind: 5, bigBlind: 10, minBuyIn: 200, maxBuyIn: 1000, maxSeats: 6 },
-      { id: 'mid', name: 'Mid Stakes', smallBlind: 25, bigBlind: 50, minBuyIn: 1000, maxBuyIn: 5000, maxSeats: 6 },
-      { id: 'high', name: 'High Rollers', smallBlind: 100, bigBlind: 200, minBuyIn: 4000, maxBuyIn: 20000, maxSeats: 6 },
-    ])
-    .onConflictDoNothing();
+
+  const { error } = await db.from('table_configs').upsert(
+    [
+      { id: 'micro', name: 'Micro Stakes', small_blind: 1, big_blind: 2, min_buy_in: 40, max_buy_in: 200, max_seats: 6 },
+      { id: 'low', name: 'Low Stakes', small_blind: 5, big_blind: 10, min_buy_in: 200, max_buy_in: 1000, max_seats: 6 },
+      { id: 'mid', name: 'Mid Stakes', small_blind: 25, big_blind: 50, min_buy_in: 1000, max_buy_in: 5000, max_seats: 6 },
+      { id: 'high', name: 'High Rollers', small_blind: 100, big_blind: 200, min_buy_in: 4000, max_buy_in: 20000, max_seats: 6 },
+    ],
+    { onConflict: 'id', ignoreDuplicates: true },
+  );
+
+  if (error) throw error;
   console.log('Done! 4 table configs seeded.');
 }
 

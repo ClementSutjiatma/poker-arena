@@ -1,29 +1,21 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import * as schema from './schema';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const connectionString = process.env.DATABASE_URL;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
-// Lazy initialization: only connect when DATABASE_URL is set.
+// Lazy initialization: only connect when Supabase env vars are set.
 // This allows the app to run without a DB (in-memory only) during development.
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let _client: SupabaseClient | null = null;
 
-export function getDb() {
-  if (_db) return _db;
-  if (!connectionString) {
-    console.warn('[db] DATABASE_URL not set — persistence disabled');
+export function getDb(): SupabaseClient | null {
+  if (_client) return _client;
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[db] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY not set — persistence disabled');
     return null;
   }
 
-  const client = postgres(connectionString, {
-    prepare: false, // Required for Supabase Transaction Mode (pgBouncer)
-    max: 3,
-    idle_timeout: 20,
-    connect_timeout: 10,
-  });
-
-  _db = drizzle(client, { schema });
-  return _db;
+  _client = createClient(supabaseUrl, supabaseKey);
+  return _client;
 }
 
 export type Database = NonNullable<ReturnType<typeof getDb>>;
