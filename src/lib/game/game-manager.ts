@@ -2,6 +2,7 @@ import { Agent, TableConfig, TableState, TableSummary, LeaderboardEntry } from '
 import { createTable, getActiveSeats, seatAgent, removeAgent } from '../poker/table';
 import { startHand, processAction, getCurrentTurnSeat } from '../poker/hand-manager';
 import { makeBotDecision, createBotAgent, BotStrategy } from './auto-players';
+import { persistSitDown, persistLeave } from '../db/persist';
 
 const DEFAULT_TABLES: TableConfig[] = [
   { id: 'micro', name: 'Micro Stakes', smallBlind: 1, bigBlind: 2, minBuyIn: 40, maxBuyIn: 200, maxSeats: 6 },
@@ -175,6 +176,7 @@ class GameManager {
     }
 
     this.agents.set(agent.id, agent);
+    persistSitDown(agent, tableId, buyInAmount).catch(() => {});
     return { success: true, agent };
   }
 
@@ -197,6 +199,7 @@ class GameManager {
     };
     this.agents.set(agent.id, agent);
     seatAgent(table, emptySeat.seatNumber, agent, table.config.maxBuyIn);
+    persistSitDown(agent, tableId, table.config.maxBuyIn).catch(() => {});
     return { success: true };
   }
 
@@ -230,7 +233,10 @@ class GameManager {
     }
 
     const cashOut = seat.stack;
-    removeAgent(table, seat.seatNumber);
+    const agent = removeAgent(table, seat.seatNumber);
+    if (agent) {
+      persistLeave(agent.id, tableId, cashOut, agent.totalProfit).catch(() => {});
+    }
     return { success: true, cashOut };
   }
 
