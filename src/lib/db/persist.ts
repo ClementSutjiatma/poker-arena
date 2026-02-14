@@ -1,7 +1,5 @@
-import { sql } from 'drizzle-orm';
 import { getDb } from './index';
-import { agents, hands, handPlayers, handActions, chipTransactions } from './schema';
-import type { Agent, HandState, TableState, Seat } from '../poker/types';
+import type { Agent, HandState } from '../poker/types';
 
 // ============================================================
 // Position computation for a 6-max table
@@ -51,101 +49,98 @@ export async function persistCompletedHand(
     const potTotal = hand.winners.reduce((sum, w) => sum + w.amount, 0);
     const winnerIds = new Set(hand.winners.map((w) => w.agentId));
     const winnerHandNames = new Map(hand.winners.map((w) => [w.agentId, w.handName]));
-
     const activeSeatNumbers = seatSnapshots.map((s) => s.seatNumber);
 
-    await db.transaction(async (tx) => {
-      // 1. Upsert agents
-      for (const snap of seatSnapshots) {
-        const netProfit = snap.endingStack - snap.startingStack;
-        const won = winnerIds.has(snap.agentId) ? 1 : 0;
-        await tx
-          .insert(agents)
-          .values({
-            id: snap.agentId,
-            name: snap.agent.name,
-            type: snap.agent.type,
-            totalProfit: netProfit,
-            handsPlayed: 1,
-            handsWon: won,
-          })
-          .onConflictDoUpdate({
-            target: agents.id,
-            set: {
-              totalProfit: sql`${agents.totalProfit} + ${netProfit}`,
-              handsPlayed: sql`${agents.handsPlayed} + 1`,
-              handsWon: sql`${agents.handsWon} + ${won}`,
-              updatedAt: sql`now()`,
-            },
-          });
-      }
+    // 1. Upsert agents — use the DB function for atomic increment
+    for (const snap of seatSnapshots) {
+      const netProfit = snap.endingStack - snap.startingStack;
+      const won = winnerIds.has(snap.agentId) ? 1 : 0;
 
-      // 2. Insert hand
-      await tx.insert(hands).values({
-        id: hand.id,
-        tableId,
-        handNumber: hand.handNumber,
-        communityCards: hand.communityCards,
-        potTotal,
-        sidePots: hand.sidePots.length > 0 ? hand.sidePots : null,
-        dealerSeatNumber: hand.dealerSeatNumber,
-        sbSeatNumber: hand.smallBlindSeatNumber,
-        bbSeatNumber: hand.bigBlindSeatNumber,
-        winners: hand.winners,
-        startedAt: new Date(hand.startedAt),
-        completedAt: new Date(hand.completedAt!),
+      const { error } = await db.rpc('upsert_agent_stats', {
+        p_id: snap.agentId,
+        p_name: snap.agent.name,
+        p_type: snap.agent.type,
+        p_profit_delta: netProfit,
+        p_hands_delta: 1,
+        p_won_delta: won,
       });
+      if (error) console.error('[db] Failed to upsert agent:', snap.agentId, error);
+    }
 
-      // 3. Insert hand_players
-      for (const snap of seatSnapshots) {
-        const position = computePosition(
-          snap.seatNumber,
-          hand.dealerSeatNumber,
-          hand.smallBlindSeatNumber,
-          hand.bigBlindSeatNumber,
-          activeSeatNumbers,
-        );
-        const isWinner = winnerIds.has(snap.agentId);
-        await tx.insert(handPlayers).values({
-          handId: hand.id,
-          agentId: snap.agentId,
-          seatNumber: snap.seatNumber,
-          position,
-          holeCards: snap.hasFolded ? null : (snap.holeCards as typeof handPlayers.$inferInsert['holeCards']),
-          startingStack: snap.startingStack,
-          endingStack: snap.endingStack,
-          netProfit: snap.endingStack - snap.startingStack,
-          isWinner,
-          finalHandName: isWinner ? (winnerHandNames.get(snap.agentId) ?? null) : null,
-        });
-      }
-
-      // 4. Insert hand_actions
-      for (let i = 0; i < hand.actions.length; i++) {
-        const a = hand.actions[i];
-        await tx.insert(handActions).values({
-          handId: hand.id,
-          agentId: a.agentId,
-          seatNumber: a.seatNumber,
-          action: a.action,
-          amount: a.amount,
-          round: a.round,
-          sequenceNumber: i,
-          actionTimestamp: new Date(a.timestamp),
-        });
-      }
-
-      // 5. Insert chip_transactions for winners
-      for (const w of hand.winners) {
-        await tx.insert(chipTransactions).values({
-          agentId: w.agentId,
-          tableId,
-          handId: hand.id,
-          type: 'pot_win',
-          amount: w.amount,
-        });
-      }
+    // 2. Insert hand
+    const { error: handError } = await db.from('hands').insert({
+      id: hand.id,
+      table_id: tableId,
+      hand_number: hand.handNumber,
+      community_cards: hand.communityCards,
+      pot_total: potTotal,
+      side_pots: hand.sidePots.length > 0 ? hand.sidePots : null,
+      dealer_seat_number: hand.dealerSeatNumber,
+      sb_seat_number: hand.smallBlindSeatNumber,
+      bb_seat_number: hand.bigBlindSeatNumber,
+      winners: hand.winners,
+      started_at: new Date(hand.startedAt).toISOString(),
+      completed_at: new Date(hand.completedAt!).toISOString(),
     });
+    if (handError) throw handError;
+
+    // 3. Insert hand_players (batch)
+    const playerRows = seatSnapshots.map((snap) => {
+      const position = computePosition(
+        snap.seatNumber,
+        hand.dealerSeatNumber,
+        hand.smallBlindSeatNumber,
+        hand.bigBlindSeatNumber,
+        activeSeatNumbers,
+      );
+      const isWinner = winnerIds.has(snap.agentId);
+      return {
+        hand_id: hand.id,
+        agent_id: snap.agentId,
+        seat_number: snap.seatNumber,
+        position,
+        hole_cards: snap.hasFolded ? null : snap.holeCards,
+        starting_stack: snap.startingStack,
+        ending_stack: snap.endingStack,
+        net_profit: snap.endingStack - snap.startingStack,
+        is_winner: isWinner,
+        final_hand_name: isWinner ? (winnerHandNames.get(snap.agentId) ?? null) : null,
+      };
+    });
+
+    const { error: playersError } = await db.from('hand_players').insert(playerRows);
+    if (playersError) throw playersError;
+
+    // 4. Insert hand_actions (batch)
+    const actionRows = hand.actions.map((a, i) => ({
+      hand_id: hand.id,
+      agent_id: a.agentId,
+      seat_number: a.seatNumber,
+      action: a.action,
+      amount: a.amount,
+      round: a.round,
+      sequence_number: i,
+      action_timestamp: new Date(a.timestamp).toISOString(),
+    }));
+
+    if (actionRows.length > 0) {
+      const { error: actionsError } = await db.from('hand_actions').insert(actionRows);
+      if (actionsError) throw actionsError;
+    }
+
+    // 5. Insert chip_transactions for winners (batch)
+    const txRows = hand.winners.map((w) => ({
+      agent_id: w.agentId,
+      table_id: tableId,
+      hand_id: hand.id,
+      type: 'pot_win',
+      amount: w.amount,
+    }));
+
+    if (txRows.length > 0) {
+      const { error: txError } = await db.from('chip_transactions').insert(txRows);
+      if (txError) throw txError;
+    }
   } catch (err) {
     console.error('[db] Failed to persist hand:', hand.id, err);
   }
@@ -164,26 +159,29 @@ export async function persistSitDown(
   if (!db) return;
 
   try {
-    // Upsert agent
+    // Upsert agent (insert if new, ignore if exists)
     await db
-      .insert(agents)
-      .values({
-        id: agent.id,
-        name: agent.name,
-        type: agent.type,
-        totalProfit: 0,
-        handsPlayed: 0,
-        handsWon: 0,
-      })
-      .onConflictDoNothing();
+      .from('agents')
+      .upsert(
+        {
+          id: agent.id,
+          name: agent.name,
+          type: agent.type,
+          total_profit: 0,
+          hands_played: 0,
+          hands_won: 0,
+        },
+        { onConflict: 'id', ignoreDuplicates: true },
+      );
 
     // Record buy-in transaction
-    await db.insert(chipTransactions).values({
-      agentId: agent.id,
-      tableId,
+    const { error } = await db.from('chip_transactions').insert({
+      agent_id: agent.id,
+      table_id: tableId,
       type: 'buy_in',
       amount: buyInAmount,
     });
+    if (error) throw error;
   } catch (err) {
     console.error('[db] Failed to persist sit-down:', agent.id, err);
   }
@@ -203,13 +201,13 @@ export async function persistLeave(
   if (!db) return;
 
   try {
-    // Record cash-out transaction
-    await db.insert(chipTransactions).values({
-      agentId,
-      tableId,
+    const { error } = await db.from('chip_transactions').insert({
+      agent_id: agentId,
+      table_id: tableId,
       type: 'cash_out',
       amount: cashOut,
     });
+    if (error) throw error;
   } catch (err) {
     console.error('[db] Failed to persist leave:', agentId, err);
   }
@@ -228,12 +226,13 @@ export async function persistBotRebuy(
   if (!db) return;
 
   try {
-    await db.insert(chipTransactions).values({
-      agentId,
-      tableId,
+    const { error } = await db.from('chip_transactions').insert({
+      agent_id: agentId,
+      table_id: tableId,
       type: 'buy_in',
       amount: rebuyAmount,
     });
+    if (error) throw error;
   } catch (err) {
     console.error('[db] Failed to persist bot rebuy:', agentId, err);
   }
