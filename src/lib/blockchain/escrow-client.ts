@@ -1,7 +1,7 @@
 import { createPublicClient, http, encodeFunctionData, keccak256, toHex, type Hex } from 'viem';
 import { PrivyClient } from '@privy-io/node';
-import { tempoTestnet, ESCROW_ADDRESS } from './chain-config';
-import { POKER_ESCROW_ABI } from './abi';
+import { tempoTestnet, ESCROW_ADDRESS, AUSD_ADDRESS } from './chain-config';
+import { POKER_ESCROW_ABI, ERC20_ABI } from './abi';
 
 // ----------------------------------------------------------------
 // Clients (lazy-initialized)
@@ -124,6 +124,82 @@ export async function emergencyRefund(tableId: string): Promise<{ hash: string }
 }
 
 // ----------------------------------------------------------------
+// Agent functions: sign from user's embedded wallet (delegated signing)
+// ----------------------------------------------------------------
+
+/**
+ * Approve the escrow contract to spend aUSD, then deposit into escrow.
+ * Both transactions are signed from the user's embedded wallet server-side.
+ */
+export async function approveAndDepositForAgent(
+  privyWalletId: string,
+  tableId: string,
+  walletAddress: string,
+  buyInChips: number,
+): Promise<{ approveHash: string; depositHash: string }> {
+  const tokenAmount = chipsToTokenUnits(buyInChips);
+
+  // 1. Approve escrow to spend aUSD
+  const approveData = encodeFunctionData({
+    abi: ERC20_ABI,
+    functionName: 'approve',
+    args: [ESCROW_ADDRESS, tokenAmount],
+  });
+  const approveTx = await sendUserWalletTx(privyWalletId, AUSD_ADDRESS, approveData);
+
+  // 2. Deposit into escrow
+  const depositData = encodeFunctionData({
+    abi: POKER_ESCROW_ABI,
+    functionName: 'deposit',
+    args: [toTableIdBytes32(tableId), tokenAmount],
+  });
+  const depositTx = await sendUserWalletTx(privyWalletId, ESCROW_ADDRESS, depositData);
+
+  return { approveHash: approveTx.hash, depositHash: depositTx.hash };
+}
+
+/**
+ * Rebuy at a table from the user's embedded wallet.
+ */
+export async function rebuyForAgent(
+  privyWalletId: string,
+  tableId: string,
+  rebuyChips: number,
+): Promise<{ approveHash: string; rebuyHash: string }> {
+  const tokenAmount = chipsToTokenUnits(rebuyChips);
+
+  // 1. Approve
+  const approveData = encodeFunctionData({
+    abi: ERC20_ABI,
+    functionName: 'approve',
+    args: [ESCROW_ADDRESS, tokenAmount],
+  });
+  const approveTx = await sendUserWalletTx(privyWalletId, AUSD_ADDRESS, approveData);
+
+  // 2. Rebuy
+  const rebuyData = encodeFunctionData({
+    abi: POKER_ESCROW_ABI,
+    functionName: 'rebuy',
+    args: [toTableIdBytes32(tableId), tokenAmount],
+  });
+  const rebuyTx = await sendUserWalletTx(privyWalletId, ESCROW_ADDRESS, rebuyData);
+
+  return { approveHash: approveTx.hash, rebuyHash: rebuyTx.hash };
+}
+
+/** Read on-chain aUSD balance for a wallet address. */
+export async function getAusdBalance(walletAddress: string): Promise<bigint> {
+  const client = getPublicClient();
+  const result = await client.readContract({
+    address: AUSD_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [walletAddress as `0x${string}`],
+  });
+  return result as bigint;
+}
+
+// ----------------------------------------------------------------
 // Internal: send tx via Privy server wallet
 // ----------------------------------------------------------------
 
@@ -136,6 +212,27 @@ async function sendServerTx(data: Hex): Promise<{ hash: string }> {
     params: {
       transaction: {
         to: ESCROW_ADDRESS,
+        data,
+      },
+    },
+  });
+
+  return { hash: result.hash };
+}
+
+/** Send a tx signed from a user's embedded wallet (delegated signing). */
+async function sendUserWalletTx(
+  privyWalletId: string,
+  to: string,
+  data: Hex,
+): Promise<{ hash: string }> {
+  const privy = getPrivyClient();
+
+  const result = await privy.wallets().ethereum().sendTransaction(privyWalletId, {
+    caip2: `eip155:${tempoTestnet.id}`,
+    params: {
+      transaction: {
+        to,
         data,
       },
     },

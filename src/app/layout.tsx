@@ -41,6 +41,9 @@ export default function RootLayout({
                 <Link href="/leaderboard" className="text-sm text-gray-400 hover:text-white transition">
                   Leaderboard
                 </Link>
+                <Link href="/onboarding" className="text-sm text-emerald-400 hover:text-emerald-300 transition font-medium">
+                  Get Started
+                </Link>
                 <AuthButton />
               </nav>
             </div>
