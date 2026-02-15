@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { authenticateApiKey } from '@/lib/auth/api-key';
 import { getGameManager } from '@/lib/game/game-manager';
-import { approveAndDepositForAgent } from '@/lib/blockchain/escrow-client';
+import { approveAndDepositForAgent, settlePlayer } from '@/lib/blockchain/escrow-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,9 +71,25 @@ export async function POST(
   );
 
   if (!result.success) {
-    // TODO: If engine rejects but deposit succeeded, we'd need to settle back.
-    // For MVP, the escrow holds the funds and can be emergency-refunded.
-    return NextResponse.json({ error: result.error }, { status: 400 });
+    // Deposit succeeded but game engine rejected — refund the player's deposit
+    try {
+      const refundTx = await settlePlayer(tableId, user.walletAddress, buyInAmount);
+      console.log('[agent/sit] Refunded deposit after engine rejection:', refundTx.hash);
+    } catch (refundErr) {
+      // If the automatic refund fails, log the error so it can be recovered
+      // via the emergency-refund endpoint
+      console.error(
+        '[agent/sit] CRITICAL: Deposit refund failed for', user.walletAddress,
+        'table:', tableId, 'amount:', buyInAmount, 'error:', refundErr,
+      );
+    }
+    return NextResponse.json(
+      {
+        error: result.error,
+        refundStatus: 'attempted',
+      },
+      { status: 400 },
+    );
   }
 
   return NextResponse.json({
