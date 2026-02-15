@@ -2,6 +2,46 @@ import { getDb } from './index';
 import type { LeaderboardEntry } from '../poker/types';
 
 // ============================================================
+// Hand count restoration
+// ============================================================
+
+/**
+ * Get the max hand_number for each table_id so we can resume
+ * hand counting from the right place after a server restart.
+ */
+export async function getMaxHandNumber(): Promise<Record<string, number> | null> {
+  const db = getDb();
+  if (!db) return null;
+
+  try {
+    // Supabase doesn't support GROUP BY directly via the query builder,
+    // so we fetch the max hand_number per table_id using RPC or a simple query.
+    // We query the most recent hand per table to get the max hand_number.
+    const { data, error } = await db
+      .from('hands')
+      .select('table_id, hand_number')
+      .order('hand_number', { ascending: false });
+
+    if (error) throw error;
+    if (!data || data.length === 0) return {};
+
+    // Extract max hand_number per table_id
+    const result: Record<string, number> = {};
+    for (const row of data) {
+      const tableId = row.table_id;
+      const handNumber = row.hand_number;
+      if (!result[tableId] || handNumber > result[tableId]) {
+        result[tableId] = handNumber;
+      }
+    }
+    return result;
+  } catch (err) {
+    console.error('[db] Failed to get max hand numbers:', err);
+    return null;
+  }
+}
+
+// ============================================================
 // Leaderboard
 // ============================================================
 

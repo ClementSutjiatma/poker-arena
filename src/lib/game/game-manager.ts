@@ -1,8 +1,9 @@
 import { Agent, TableConfig, TableState, TableSummary, LeaderboardEntry } from '../poker/types';
-import { createTable, getActiveSeats, seatAgent, removeAgent } from '../poker/table';
+import { createTable, getActiveSeats, getOccupiedSeats, seatAgent, removeAgent } from '../poker/table';
 import { startHand, processAction, getCurrentTurnSeat, completeShowdown } from '../poker/hand-manager';
 import { makeBotDecision, createBotAgent, BotStrategy } from './auto-players';
 import { persistSitDown, persistLeave } from '../db/persist';
+import { getMaxHandNumber } from '../db/queries';
 
 const DEFAULT_TABLES: TableConfig[] = [
   { id: 'micro', name: 'Micro Stakes', smallBlind: 1, bigBlind: 2, minBuyIn: 40, maxBuyIn: 200, maxSeats: 6 },
@@ -13,7 +14,17 @@ const DEFAULT_TABLES: TableConfig[] = [
 
 const TURN_TIMEOUT_MS = 30_000;
 const BOT_DELAY_MS = 800;
+const BOT_ONLY_DELAY_MS = 0;
 const SHOWDOWN_DISPLAY_MS = 3_000;
+const BOT_ONLY_SHOWDOWN_MS = 300;
+
+/**
+ * Check if a table has only bots (no human players seated).
+ */
+function isTableBotOnly(table: TableState): boolean {
+  const occupied = getOccupiedSeats(table);
+  return occupied.length > 0 && occupied.every(s => s.agent!.type !== 'human');
+}
 
 class GameManager {
   tables: Map<string, TableState> = new Map();
@@ -32,6 +43,9 @@ class GameManager {
 
     // Seed bots on each table
     this.seedBots();
+
+    // Restore hand counts from DB (fire-and-forget — game runs fine without it)
+    this.restoreHandCounts();
 
     // Start game loop
     this.startGameLoop();
@@ -60,25 +74,61 @@ class GameManager {
     }
   }
 
+  private async restoreHandCounts(): Promise<void> {
+    try {
+      const counts = await getMaxHandNumber();
+      if (!counts) return;
+
+      for (const [tableId, maxHandNumber] of Object.entries(counts)) {
+        const table = this.tables.get(tableId);
+        if (table && maxHandNumber > table.handCount) {
+          table.handCount = maxHandNumber;
+          console.log(`[game] Restored hand count for table ${tableId}: ${maxHandNumber}`);
+        }
+      }
+    } catch (err) {
+      console.error('[game] Failed to restore hand counts:', err);
+    }
+  }
+
   private startGameLoop(): void {
     if (this.tickInterval) return;
     this.tickInterval = setInterval(() => this.tick(), 500);
   }
 
   private tick(): void {
-    for (const [, table] of this.tables) {
-      this.processTable(table);
+    for (const [tableId, table] of this.tables) {
+      try {
+        this.processTable(table);
+      } catch (err) {
+        console.error(`[game] Error processing table ${tableId}:`, err);
+        // If a hand got stuck, clear it so the next hand can start
+        if (table.currentHand && table.currentHand.phase !== 'showdown') {
+          console.error(`[game] Clearing stuck hand ${table.currentHand.id} on table ${tableId}`);
+          table.currentHand = null;
+        }
+      }
     }
   }
 
-  private processTable(table: TableState): void {
+  /**
+   * Process a single table tick. In bot-only mode, recursively processes
+   * all bot actions within a single tick for speed (up to MAX_BOT_ACTIONS_PER_TICK).
+   */
+  private processTable(table: TableState, depth = 0): void {
     const activeSeats = getActiveSeats(table);
+    const botOnly = isTableBotOnly(table);
+    const MAX_BOT_ACTIONS_PER_TICK = 50;
 
     // If no hand is active, start one if we have enough players
     if (!table.currentHand) {
       if (activeSeats.length >= 2) {
         try {
           startHand(table);
+          // In bot-only mode, immediately start processing the new hand
+          if (botOnly && depth < MAX_BOT_ACTIONS_PER_TICK) {
+            this.processTable(table, depth + 1);
+          }
         } catch {
           // Not enough players or other issue
         }
@@ -93,9 +143,14 @@ class GameManager {
 
     // Showdown phase: wait for display delay, then complete the hand
     if (hand.phase === 'showdown') {
+      const showdownDelay = botOnly ? BOT_ONLY_SHOWDOWN_MS : SHOWDOWN_DISPLAY_MS;
       const elapsed = Date.now() - hand.lastActionAt;
-      if (elapsed >= SHOWDOWN_DISPLAY_MS) {
+      if (elapsed >= showdownDelay) {
         completeShowdown(table, hand);
+        // In bot-only mode, immediately start the next hand
+        if (botOnly && depth < MAX_BOT_ACTIONS_PER_TICK) {
+          this.processTable(table, depth + 1);
+        }
       }
       return;
     }
@@ -109,16 +164,42 @@ class GameManager {
     const now = Date.now();
     const timeSinceLastAction = now - hand.lastActionAt;
 
-    // Bot auto-play: wait a short delay to simulate "thinking"
+    // Bot auto-play
     if (seat.agent.type !== 'human') {
-      if (timeSinceLastAction >= BOT_DELAY_MS) {
+      const delay = botOnly ? BOT_ONLY_DELAY_MS : BOT_DELAY_MS;
+      if (timeSinceLastAction >= delay) {
         const decision = makeBotDecision(
           seat.agent.type as BotStrategy,
           seat,
           hand,
           table,
         );
-        processAction(table, hand, currentSeat, decision.action, decision.amount);
+        let success = processAction(table, hand, currentSeat, decision.action, decision.amount);
+
+        // If the bot's chosen action was rejected, fall back to check or fold
+        if (!success) {
+          const toCall = hand.currentBet - seat.currentBet;
+          if (toCall > 0) {
+            success = processAction(table, hand, currentSeat, 'fold');
+          } else {
+            success = processAction(table, hand, currentSeat, 'check');
+          }
+        }
+
+        // Safety: if even the fallback fails, force-fold to prevent permanent hang
+        if (!success) {
+          console.error(
+            `[game] Bot ${seat.agent.name} stuck at table ${table.config.id}, hand ${hand.id} — force-folding`
+          );
+          seat.hasFolded = true;
+          seat.hasActed = true;
+          hand.lastActionAt = Date.now();
+        }
+
+        // In bot-only mode, process multiple actions per tick for speed
+        if (botOnly && depth < MAX_BOT_ACTIONS_PER_TICK) {
+          this.processTable(table, depth + 1);
+        }
       }
       return;
     }

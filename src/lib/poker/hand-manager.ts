@@ -251,8 +251,14 @@ export function processAction(
       if (hand.currentBet > 0 && hand.currentBettingRound !== 'preflop') return false; // Use raise if there's already a bet
       // In preflop, the BB is considered a bet, so any new bet is a raise
       if (hand.currentBettingRound === 'preflop') {
-        // Treat as raise in preflop
-        return processAction(table, hand, seatNumber, 'raise', amount);
+        // Convert bet amount to a proper raise-to amount:
+        // If the amount is at or below the current bet, it was meant as a bet size,
+        // so convert to raise-to by adding to currentBet.
+        let raiseToAmount = amount;
+        if (raiseToAmount !== undefined && raiseToAmount <= hand.currentBet) {
+          raiseToAmount = hand.currentBet + Math.max(raiseToAmount, hand.minRaise);
+        }
+        return processAction(table, hand, seatNumber, 'raise', raiseToAmount);
       }
       const betAmount = amount ?? table.config.bigBlind;
       if (betAmount < table.config.bigBlind && betAmount < seat.stack) return false;
