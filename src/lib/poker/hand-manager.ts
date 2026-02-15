@@ -360,15 +360,22 @@ function resetActedForNewBet(table: TableState, hand: HandState, raiserSeat: num
 }
 
 function advanceAction(table: TableState, hand: HandState): void {
-  // Find next player who hasn't acted and can act
-  const canAct = hand.activePlayerOrder.filter(sn => {
-    const s = table.seats[sn];
-    return !s.hasFolded && !s.isAllIn && !s.hasActed;
-  });
+  // Find next player who hasn't acted and can act, starting from the
+  // position AFTER the current player and wrapping around. This ensures
+  // that after a raise, action continues clockwise from the raiser rather
+  // than jumping back to the beginning of the betting order.
+  const order = hand.activePlayerOrder;
+  const len = order.length;
+  const startFrom = hand.currentPlayerIndex;
 
-  if (canAct.length > 0) {
-    hand.currentPlayerIndex = hand.activePlayerOrder.indexOf(canAct[0]);
-    return;
+  for (let i = 1; i <= len; i++) {
+    const idx = (startFrom + i) % len;
+    const sn = order[idx];
+    const s = table.seats[sn];
+    if (!s.hasFolded && !s.isAllIn && !s.hasActed) {
+      hand.currentPlayerIndex = idx;
+      return;
+    }
   }
 
   // All players have acted — advance to next phase
