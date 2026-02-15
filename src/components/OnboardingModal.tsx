@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useWallets, usePrivy } from '@privy-io/react-auth';
+import { useWallets, usePrivy, useSigners } from '@privy-io/react-auth';
 import { useReadContract } from 'wagmi';
 import { formatUnits } from 'viem';
 import { ERC20_ABI } from '@/lib/blockchain/abi';
 import { AUSD_ADDRESS, tempoTestnet } from '@/lib/blockchain/chain-config';
+
+const AUTHORIZATION_QUORUM_ID = process.env.NEXT_PUBLIC_PRIVY_QUORUM_ID ?? '';
 
 type Step = 'name' | 'mint' | 'done';
 
@@ -27,6 +29,8 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const [mintSuccess, setMintSuccess] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const walletCreationAttempted = useRef(false);
+  const signerRegistered = useRef(false);
+  const { addSigners } = useSigners();
 
   // Auto-create embedded wallet if none found after wallets are ready
   useEffect(() => {
@@ -36,6 +40,20 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
       createWallet().catch(() => {}).finally(() => setCreatingWallet(false));
     }
   }, [walletsReady, walletAddress, createWallet]);
+
+  // Register the server as a signer on the user's embedded wallet (once)
+  useEffect(() => {
+    if (walletAddress && AUTHORIZATION_QUORUM_ID && !signerRegistered.current) {
+      signerRegistered.current = true;
+      addSigners({
+        address: walletAddress,
+        signers: [{ signerId: AUTHORIZATION_QUORUM_ID }],
+      }).catch((err) => {
+        // May fail if signer is already registered — that's fine
+        console.log('[onboarding] addSigners:', err?.message ?? err);
+      });
+    }
+  }, [walletAddress, addSigners]);
 
   const { data: balance, refetch: refetchBalance } = useReadContract({
     address: AUSD_ADDRESS,

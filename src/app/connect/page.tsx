@@ -1,9 +1,31 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
+import { useEffect, useRef } from 'react';
+import { usePrivy, useWallets, useSigners } from '@privy-io/react-auth';
+
+const AUTHORIZATION_QUORUM_ID = process.env.NEXT_PUBLIC_PRIVY_QUORUM_ID ?? '';
 
 export default function ConnectPage() {
   const { ready, authenticated, user, login } = usePrivy();
+  const { wallets } = useWallets();
+  const { addSigners } = useSigners();
+  const signerRegistered = useRef(false);
+
+  const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
+  const walletAddress = embeddedWallet?.address;
+
+  // Ensure the server is registered as a signer on this wallet
+  useEffect(() => {
+    if (walletAddress && AUTHORIZATION_QUORUM_ID && !signerRegistered.current) {
+      signerRegistered.current = true;
+      addSigners({
+        address: walletAddress,
+        signers: [{ signerId: AUTHORIZATION_QUORUM_ID }],
+      }).catch((err) => {
+        console.log('[connect] addSigners:', err?.message ?? err);
+      });
+    }
+  }, [walletAddress, addSigners]);
 
   if (!ready) {
     return (

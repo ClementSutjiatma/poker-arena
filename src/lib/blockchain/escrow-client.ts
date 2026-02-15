@@ -228,6 +228,11 @@ async function sendUserWalletTx(
 ): Promise<{ hash: string }> {
   const privy = getPrivyClient();
 
+  // The authorization private key allows the server to sign on behalf of user wallets.
+  // Format: base64-encoded PKCS8 key (no PEM headers). The env var may have a "wallet-auth:" prefix.
+  const rawKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY ?? '';
+  const authPrivateKey = rawKey.replace(/^wallet-auth:/, '');
+
   const result = await privy.wallets().ethereum().sendTransaction(privyWalletId, {
     caip2: `eip155:${tempoTestnet.id}`,
     params: {
@@ -235,6 +240,9 @@ async function sendUserWalletTx(
         to,
         data,
       },
+    },
+    authorization_context: {
+      authorization_private_keys: [authPrivateKey],
     },
   });
 
