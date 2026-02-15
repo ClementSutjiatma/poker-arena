@@ -5,7 +5,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, formatUnits, keccak256, toHex } from 'viem';
 import { ERC20_ABI, POKER_ESCROW_ABI } from '@/lib/blockchain/abi';
-import { AUSD_ADDRESS, ESCROW_ADDRESS, tempoTestnet, TEMPO_MIN_BASE_FEE } from '@/lib/blockchain/chain-config';
+import { AUSD_ADDRESS, ESCROW_ADDRESS, tempoTestnet } from '@/lib/blockchain/chain-config';
 
 type Step = 'input' | 'approving' | 'depositing' | 'registering' | 'done' | 'error';
 
@@ -56,6 +56,16 @@ export default function BuyInModal({
     query: { enabled: !!walletAddress },
   });
 
+  // Read current allowance so we can skip approve if already sufficient
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+    address: AUSD_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: walletAddress ? [walletAddress, ESCROW_ADDRESS] : undefined,
+    chainId: tempoTestnet.id,
+    query: { enabled: !!walletAddress },
+  });
+
   // Approve tx
   const {
     writeContract: writeApprove,
@@ -83,33 +93,10 @@ export default function BuyInModal({
     ? parseFloat(formatUnits(balance, 6))
     : 0;
 
-  // Explicit gas fee overrides for Tempo Testnet (minimum 20 gwei base fee).
-  // The chain config has fee estimation, but we also set explicit overrides
-  // as a safety net in case the embedded wallet ignores chain-level estimates.
-  const gasOverrides = {
-    maxFeePerGas: TEMPO_MIN_BASE_FEE * BigInt(3), // 60 gwei — generous headroom
-    maxPriorityFeePerGas: TEMPO_MIN_BASE_FEE, // 20 gwei
-  };
-
-  const handleApprove = useCallback(() => {
-    setStep('approving');
-    writeApprove(
-      {
-        address: AUSD_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [ESCROW_ADDRESS, amountInTokenUnits],
-        chainId: tempoTestnet.id,
-        ...gasOverrides,
-      },
-      {
-        onError: (err) => {
-          setStep('error');
-          setErrorMessage(err.message.slice(0, 200));
-        },
-      },
-    );
-  }, [writeApprove, amountInTokenUnits]);
+  // Gas limit for ERC-20 approve & escrow deposit/rebuy calls.
+  // Tempo Testnet gas *prices* are handled by the chain-level fees config in chain-config.ts.
+  // We only set an explicit gas limit here to avoid "intrinsic gas too low" errors.
+  const GAS_LIMIT = BigInt(150000); // 150k — generous for approve/deposit
 
   const handleDeposit = useCallback(() => {
     setStep('depositing');
@@ -121,7 +108,7 @@ export default function BuyInModal({
         functionName,
         args: [tableIdBytes32, amountInTokenUnits],
         chainId: tempoTestnet.id,
-        ...gasOverrides,
+        gas: GAS_LIMIT,
       },
       {
         onError: (err) => {
@@ -131,6 +118,39 @@ export default function BuyInModal({
       },
     );
   }, [writeDeposit, isRebuy, tableIdBytes32, amountInTokenUnits]);
+
+  const handleApprove = useCallback(async () => {
+    // Re-check allowance: if already sufficient, skip approve and go straight to deposit
+    try {
+      const { data: freshAllowance } = await refetchAllowance();
+      if (freshAllowance !== undefined && freshAllowance >= amountInTokenUnits) {
+        // Allowance already granted (e.g. from a previous approve that succeeded
+        // before deposit failed). Skip straight to deposit.
+        handleDeposit();
+        return;
+      }
+    } catch {
+      // Allowance check failed — proceed with approve anyway
+    }
+
+    setStep('approving');
+    writeApprove(
+      {
+        address: AUSD_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [ESCROW_ADDRESS, amountInTokenUnits],
+        chainId: tempoTestnet.id,
+        gas: GAS_LIMIT,
+      },
+      {
+        onError: (err) => {
+          setStep('error');
+          setErrorMessage(err.message.slice(0, 200));
+        },
+      },
+    );
+  }, [writeApprove, amountInTokenUnits, refetchAllowance, handleDeposit]);
 
   const handleRegister = useCallback(async () => {
     if (!walletAddress || !user) return;
