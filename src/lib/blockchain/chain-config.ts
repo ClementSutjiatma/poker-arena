@@ -21,4 +21,6 @@ export const AUSD_ADDRESS = '0x20c0000000000000000000000000000000000001' as cons
 
 /** Deployed PokerEscrow contract address (set after deployment). */
 const rawEscrow = (process.env.NEXT_PUBLIC_ESCROW_CONTRACT ?? '').trim();
-export const ESCROW_ADDRESS = (rawEscrow ? getAddress(rawEscrow) : '0x') as `0x${string}`;
+export const ESCROW_ADDRESS = (
+  rawEscrow ? getAddress(rawEscrow.toLowerCase() as `0x${string}`) : '0x'
+) as `0x${string}`;
