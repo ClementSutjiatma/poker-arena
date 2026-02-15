@@ -240,6 +240,20 @@ async function sendServerTx(data: Hex): Promise<{ hash: string }> {
     },
   });
 
+  // Wait for the transaction to be mined and verify it succeeded.
+  // Privy's sendTransaction only broadcasts — we must confirm on-chain.
+  const client = getPublicClient();
+  const receipt = await client.waitForTransactionReceipt({
+    hash: result.hash as `0x${string}`,
+    timeout: 30_000, // 30s — Tempo has sub-second finality
+  });
+
+  if (receipt.status === 'reverted') {
+    console.error('[sendServerTx] Transaction reverted on-chain:', result.hash);
+    throw new Error(`Settlement transaction reverted: ${result.hash}`);
+  }
+
+  console.log('[sendServerTx] Confirmed on-chain:', result.hash, 'block:', receipt.blockNumber);
   return { hash: result.hash };
 }
 
@@ -277,7 +291,19 @@ async function sendUserWalletTx(
       },
     });
 
-    console.log('[sendUserWalletTx] success, hash:', result.hash);
+    // Wait for on-chain confirmation
+    const client = getPublicClient();
+    const receipt = await client.waitForTransactionReceipt({
+      hash: result.hash as `0x${string}`,
+      timeout: 30_000,
+    });
+
+    if (receipt.status === 'reverted') {
+      console.error('[sendUserWalletTx] Transaction reverted on-chain:', result.hash);
+      throw new Error(`Transaction reverted: ${result.hash}`);
+    }
+
+    console.log('[sendUserWalletTx] Confirmed on-chain:', result.hash, 'block:', receipt.blockNumber);
     return { hash: result.hash };
   } catch (err: unknown) {
     const e = err as Record<string, unknown>;

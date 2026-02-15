@@ -43,15 +43,18 @@ export async function POST(
   // Settle on-chain — send final stack back to player's wallet
   let txHash: string | undefined;
   if (result.walletAddress && result.cashOut !== undefined) {
+    console.log('[agent/leave] Settling on-chain:', result.walletAddress, 'cashOut:', result.cashOut, 'table:', tableId);
     try {
       const tx = await settlePlayer(tableId, result.walletAddress, result.cashOut);
       txHash = tx.hash;
+      console.log('[agent/leave] Settlement confirmed:', txHash);
     } catch (err) {
-      console.error('[agent/leave] Settlement failed:', err);
+      console.error('[agent/leave] Settlement failed for', result.walletAddress, 'cashOut:', result.cashOut, err);
       return NextResponse.json({
         success: true,
         cashOut: result.cashOut,
-        settlementError: 'On-chain settlement failed. Funds will be returned manually.',
+        walletAddress: result.walletAddress,
+        settlementError: 'On-chain settlement failed. Use the emergency refund to recover funds.',
       });
     }
   }

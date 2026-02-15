@@ -11,7 +11,7 @@ interface CashOutButtonProps {
 
 export default function CashOutButton({ tableId, agentId, stack, onSuccess }: CashOutButtonProps) {
   const [status, setStatus] = useState<'idle' | 'pending' | 'done' | 'error'>('idle');
-  const [result, setResult] = useState<{ cashOut?: number; txHash?: string; error?: string }>({});
+  const [result, setResult] = useState<{ cashOut?: number; txHash?: string; error?: string; settlementError?: string }>({});
 
   const handleCashOut = async () => {
     setStatus('pending');
@@ -25,6 +25,14 @@ export default function CashOutButton({ tableId, agentId, stack, onSuccess }: Ca
       if (!res.ok) {
         setStatus('error');
         setResult({ error: data.error });
+        return;
+      }
+      // Check if settlement succeeded — the API may return success for
+      // the game-engine leave but report a settlement failure separately.
+      if (data.settlementError) {
+        setStatus('error');
+        setResult({ error: data.settlementError });
+        onSuccess(); // Still leave the table (game engine already removed player)
         return;
       }
       setStatus('done');
