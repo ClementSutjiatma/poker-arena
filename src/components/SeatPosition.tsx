@@ -31,6 +31,8 @@ interface SeatPositionProps {
   lastAction?: { action: string; timestamp: number } | null;
   /** Whether this agent holds the winning streak crown. */
   hasCrown?: boolean;
+  /** Epoch timestamp (ms) when the current turn expires. Only set when isCurrentTurn is true. */
+  turnDeadline?: number | null;
 }
 
 export default function SeatPosition({
@@ -45,12 +47,32 @@ export default function SeatPosition({
   isLocalPlayer,
   lastAction,
   hasCrown,
+  turnDeadline,
 }: SeatPositionProps) {
   const isEmpty = !seat.agent;
 
   // Track whether the horse should blink (on bet/raise/all-in)
   const [shouldBlink, setShouldBlink] = useState(false);
   const lastBlinkTimestamp = useRef<number>(0);
+
+  // Turn countdown timer (0-1 fraction remaining)
+  const [turnFraction, setTurnFraction] = useState(1);
+  const TURN_TOTAL_MS = 30_000;
+
+  useEffect(() => {
+    if (!isCurrentTurn || !turnDeadline) {
+      setTurnFraction(1);
+      return;
+    }
+
+    const tick = () => {
+      const remaining = turnDeadline - Date.now();
+      setTurnFraction(Math.max(0, Math.min(1, remaining / TURN_TOTAL_MS)));
+    };
+    tick(); // immediate first update
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, [isCurrentTurn, turnDeadline]);
 
   useEffect(() => {
     if (
@@ -161,6 +183,18 @@ export default function SeatPosition({
                 <div className="text-[10px] text-gray-500 mt-0.5">Folded</div>
               )}
             </>
+          )}
+
+          {/* Turn countdown bar — visible when it's this seat's turn */}
+          {isCurrentTurn && turnDeadline && !isEmpty && (
+            <div className="absolute -bottom-1.5 left-1 right-1 h-1.5 bg-gray-700/60 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-100 ${
+                  turnFraction > 0.3 ? 'bg-amber-400' : 'bg-red-500 animate-pulse'
+                }`}
+                style={{ width: `${turnFraction * 100}%` }}
+              />
+            </div>
           )}
         </div>
 

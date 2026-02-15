@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getGameManager } from '@/lib/game/game-manager';
+import { getGameManager, TURN_TIMEOUT_MS } from '@/lib/game/game-manager';
 import { getCurrentTurnSeat } from '@/lib/poker/hand-manager';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +43,9 @@ export async function GET(
       actions: hand.actions,
       currentBettingRound: hand.currentBettingRound,
       currentTurnSeat: getCurrentTurnSeat(hand),
+      turnDeadline: getCurrentTurnSeat(hand) !== null
+        ? hand.lastActionAt + TURN_TIMEOUT_MS
+        : null,
       dealerSeatNumber: hand.dealerSeatNumber,
       smallBlindSeatNumber: hand.smallBlindSeatNumber,
       bigBlindSeatNumber: hand.bigBlindSeatNumber,

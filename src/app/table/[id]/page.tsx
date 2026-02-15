@@ -31,6 +31,7 @@ interface TableData {
       timestamp: number;
     }[];
     currentTurnSeat: number | null;
+    turnDeadline: number | null;
     currentBet: number;
     minRaise: number;
     dealerSeatNumber: number;

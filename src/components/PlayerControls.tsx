@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import CashOutButton from './CashOutButton';
 
 interface PlayerControlsProps {
@@ -23,6 +23,8 @@ interface PlayerControlsProps {
   isBetweenHands: boolean;
   /** Current table max buy-in. */
   maxBuyIn: number;
+  /** Epoch timestamp (ms) when the current turn expires. null if not player's turn. */
+  turnDeadline?: number | null;
   onAction: (action: string, amount?: number) => void;
   onLeave: () => void;
   onRebuy: () => void;
@@ -40,12 +42,31 @@ export default function PlayerControls({
   isInHand,
   isBetweenHands,
   maxBuyIn,
+  turnDeadline,
   onAction,
   onLeave,
   onRebuy,
 }: PlayerControlsProps) {
   const [raiseAmount, setRaiseAmount] = useState(minRaise);
   const [showCashOut, setShowCashOut] = useState(false);
+
+  // Turn countdown (seconds remaining)
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isMyTurn || !turnDeadline) {
+      setSecondsLeft(null);
+      return;
+    }
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [isMyTurn, turnDeadline]);
 
   const canCheck = toCall === 0;
   const isBet = currentBet === 0;
@@ -80,6 +101,24 @@ export default function PlayerControls({
       {/* Action buttons — only when it's our turn */}
       {isMyTurn && isInHand && (
         <div className="space-y-2">
+          {/* Countdown timer */}
+          {secondsLeft !== null && (
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-250 ${
+                    secondsLeft > 10 ? 'bg-amber-400' : 'bg-red-500 animate-pulse'
+                  }`}
+                  style={{ width: `${(secondsLeft / 30) * 100}%` }}
+                />
+              </div>
+              <span className={`text-xs font-bold tabular-nums min-w-[2rem] text-right ${
+                secondsLeft > 10 ? 'text-amber-400' : 'text-red-400'
+              }`}>
+                {secondsLeft}s
+              </span>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={() => onAction('fold')}
@@ -146,7 +185,7 @@ export default function PlayerControls({
 
       {/* Waiting message when in hand but not our turn */}
       {!isMyTurn && isInHand && (
-        <p className="text-xs text-gray-500 text-center py-2">Waiting for your turn...</p>
+        <p className="text-xs text-gray-500 text-center py-2">Waiting for your turn&hellip;</p>
       )}
 
       {/* Between hands controls */}

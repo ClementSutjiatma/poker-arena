@@ -53,6 +53,8 @@ interface TableData {
       timestamp: number;
     }[];
     currentTurnSeat: number | null;
+    /** Epoch timestamp (ms) when the current turn expires. null if no active turn. */
+    turnDeadline: number | null;
     currentBet: number;
     minRaise: number;
     dealerSeatNumber: number;
@@ -254,6 +256,7 @@ export default function PokerTable({
                 isLocalPlayer={seat.agent?.id === localAgentId}
                 lastAction={lastAction ? { action: lastAction.action, timestamp: lastAction.timestamp } : null}
                 hasCrown={crownAgentName !== null && seat.agent?.name === crownAgentName}
+                turnDeadline={hand?.currentTurnSeat === i ? hand?.turnDeadline : null}
               />
             );
           })}
@@ -312,6 +315,7 @@ export default function PokerTable({
             isInHand={!!isInActiveHand}
             isBetweenHands={isBetweenHands}
             maxBuyIn={maxBuyIn}
+            turnDeadline={isLocalPlayerTurn ? hand?.turnDeadline : null}
             onAction={handleAction}
             onLeave={() => onLeave?.()}
             onRebuy={handleRebuy}
