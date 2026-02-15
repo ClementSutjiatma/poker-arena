@@ -33,6 +33,7 @@ export default function PlayerControls({
   agentId,
   stack,
   toCall,
+  currentBet,
   bigBlind,
   minRaise,
   isMyTurn,
@@ -47,6 +48,7 @@ export default function PlayerControls({
   const [showCashOut, setShowCashOut] = useState(false);
 
   const canCheck = toCall === 0;
+  const isBet = currentBet === 0;
   const canRebuy = isBetweenHands && stack < maxBuyIn;
 
   if (showCashOut) {
@@ -113,11 +115,11 @@ export default function PlayerControls({
               className="flex-1 accent-emerald-500"
             />
             <button
-              onClick={() => onAction('raise', raiseAmount)}
+              onClick={() => onAction(isBet ? 'bet' : 'raise', raiseAmount)}
               disabled={raiseAmount > stack}
               className="px-4 py-2 text-sm font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition cursor-pointer disabled:opacity-50"
             >
-              Raise ${raiseAmount}
+              {isBet ? 'Bet' : 'Raise'} ${raiseAmount}
             </button>
           </div>
 

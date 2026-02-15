@@ -92,9 +92,16 @@ class GameManager {
         this.processTable(table);
       } catch (err) {
         console.error(`[game] Error processing table ${tableId}:`, err);
-        // If a hand got stuck, clear it so the next hand can start
+        // If a hand got stuck, return current bets to players and clear
         if (table.currentHand && table.currentHand.phase !== 'showdown') {
           console.error(`[game] Clearing stuck hand ${table.currentHand.id} on table ${tableId}`);
+          // Return current bets to player stacks to prevent silent fund loss
+          for (const seat of table.seats) {
+            if (seat.agent && seat.currentBet > 0) {
+              seat.stack += seat.currentBet;
+              seat.currentBet = 0;
+            }
+          }
           table.currentHand = null;
         }
       }
@@ -102,10 +109,16 @@ class GameManager {
   }
 
   private processTable(table: TableState): void {
-    const activeSeats = getActiveSeats(table);
-
-    // If no hand is active, start one if we have enough players
+    // If no hand is active, auto-resume sitting-out human players and start a new hand
     if (!table.currentHand) {
+      // Resume newly-seated human players now that the frontend has had time to poll
+      for (const seat of table.seats) {
+        if (seat.agent && seat.agent.type === 'human' && seat.isSittingOut && seat.stack > 0) {
+          seat.isSittingOut = false;
+        }
+      }
+
+      const activeSeats = getActiveSeats(table);
       if (activeSeats.length >= 2) {
         try {
           startHand(table);
@@ -232,7 +245,9 @@ class GameManager {
       walletAddress,
     };
 
-    if (!seatAgent(table, seatNumber, agent, buyInAmount)) {
+    // Human players start sitting out so the frontend has time to poll and render
+    // the seat before they're dealt into a hand
+    if (!seatAgent(table, seatNumber, agent, buyInAmount, true)) {
       return { success: false, error: 'Invalid seat, already occupied, or invalid buy-in' };
     }
 

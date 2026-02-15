@@ -47,7 +47,22 @@ export default function TablePage() {
   const { authenticated, login } = usePrivy();
   const [table, setTable] = useState<TableData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [localAgentId, setLocalAgentId] = useState<string | null>(null);
+  const [localAgentId, setLocalAgentId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(`poker_agent_${id}`) || null;
+    }
+    return null;
+  });
+  const [disconnected, setDisconnected] = useState(false);
+
+  // Persist agent ID to sessionStorage so it survives page refreshes
+  useEffect(() => {
+    if (localAgentId) {
+      sessionStorage.setItem(`poker_agent_${id}`, localAgentId);
+    } else {
+      sessionStorage.removeItem(`poker_agent_${id}`);
+    }
+  }, [localAgentId, id]);
 
   const fetchTable = useCallback(async () => {
     try {
@@ -61,7 +76,10 @@ export default function TablePage() {
         if (localAgentId) {
           const stillSeated = data.seats.some(s => s.agent?.id === localAgentId);
           if (!stillSeated) {
-            setLocalAgentId(null);
+            // Don't silently clear — show a disconnected state so the player knows
+            setDisconnected(true);
+          } else {
+            setDisconnected(false);
           }
         }
       } else {
@@ -97,6 +115,7 @@ export default function TablePage() {
 
   const handleLeave = () => {
     setLocalAgentId(null);
+    setDisconnected(false);
   };
 
   if (error) {
@@ -125,12 +144,32 @@ export default function TablePage() {
           &larr; Back to Lobby
         </Link>
       </div>
+      {disconnected && localAgentId && (
+        <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-3 mb-4 text-center">
+          <p className="text-red-400 text-sm font-medium mb-1">
+            Connection to table lost
+          </p>
+          <p className="text-gray-400 text-xs mb-2">
+            Your agent was removed from the table (likely due to a server restart).
+            Your escrowed funds are safe in the smart contract.
+          </p>
+          <button
+            onClick={() => {
+              setLocalAgentId(null);
+              setDisconnected(false);
+            }}
+            className="px-4 py-1.5 text-xs font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition cursor-pointer"
+          >
+            Re-join Table
+          </button>
+        </div>
+      )}
       <PokerTable
         table={table}
         onAddBot={handleAddBot}
         isAuthenticated={authenticated}
         onLogin={login}
-        localAgentId={localAgentId}
+        localAgentId={disconnected ? null : localAgentId}
         onSit={handleSit}
         onLeave={handleLeave}
       />

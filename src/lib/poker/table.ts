@@ -29,7 +29,7 @@ export function createEmptySeat(seatNumber: number): Seat {
   };
 }
 
-export function seatAgent(table: TableState, seatNumber: number, agent: Agent, buyInAmount: number): boolean {
+export function seatAgent(table: TableState, seatNumber: number, agent: Agent, buyInAmount: number, initialSittingOut = false): boolean {
   if (seatNumber < 0 || seatNumber >= table.config.maxSeats) return false;
   const seat = table.seats[seatNumber];
   if (seat.agent !== null) return false;
@@ -38,7 +38,7 @@ export function seatAgent(table: TableState, seatNumber: number, agent: Agent, b
   seat.agent = agent;
   seat.stack = buyInAmount;
   seat.buyIn = buyInAmount;
-  seat.isSittingOut = false;
+  seat.isSittingOut = initialSittingOut;
   seat.holeCards = [];
   seat.currentBet = 0;
   seat.hasActed = false;
