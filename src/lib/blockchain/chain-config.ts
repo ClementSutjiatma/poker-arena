@@ -1,4 +1,4 @@
-import { defineChain } from 'viem';
+import { defineChain, getAddress } from 'viem';
 
 /**
  * Tempo Testnet (Moderato) — Stripe's L1 stablecoin chain.
@@ -20,4 +20,5 @@ export const tempoTestnet = defineChain({
 export const AUSD_ADDRESS = '0x20c0000000000000000000000000000000000001' as const;
 
 /** Deployed PokerEscrow contract address (set after deployment). */
-export const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_ESCROW_CONTRACT ?? '0x') as `0x${string}`;
+const rawEscrow = (process.env.NEXT_PUBLIC_ESCROW_CONTRACT ?? '').trim();
+export const ESCROW_ADDRESS = (rawEscrow ? getAddress(rawEscrow) : '0x') as `0x${string}`;
