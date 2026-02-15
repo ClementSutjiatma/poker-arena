@@ -48,13 +48,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find the embedded wallet
-    const embeddedWallet = privyUser.linked_accounts.find(
+    // Find existing embedded Ethereum wallet, or create one
+    const existingWallet = privyUser.linked_accounts.find(
       (a) => isEmbeddedWalletLinkedAccount(a) && a.chain_type === 'ethereum',
     );
 
-    const walletAddress = embeddedWallet && 'address' in embeddedWallet ? embeddedWallet.address : null;
-    const privyWalletId = embeddedWallet && 'id' in embeddedWallet ? (embeddedWallet.id ?? null) : null;
+    let walletAddress: string;
+    let privyWalletId: string;
+
+    if (existingWallet && 'address' in existingWallet && 'id' in existingWallet && existingWallet.id) {
+      walletAddress = existingWallet.address;
+      privyWalletId = existingWallet.id;
+    } else {
+      // Create a new Ethereum wallet owned by this user (Tempo-compatible)
+      const newWallet = await privy.wallets().create({
+        chain_type: 'ethereum',
+        owner: { user_id: privyUserId },
+      });
+      walletAddress = newWallet.address;
+      privyWalletId = newWallet.id;
+    }
 
     // Extract email and display name from linked accounts
     const emailAccount = privyUser.linked_accounts.find((a) => a.type === 'email') as { address?: string } | undefined;
