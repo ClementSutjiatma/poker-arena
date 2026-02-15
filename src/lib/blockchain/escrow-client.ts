@@ -54,6 +54,16 @@ export function chipsToTokenUnits(chips: number): bigint {
   return BigInt(chips) * BigInt(1_000_000);
 }
 
+/** Convert a bigint to a hex string with 0x prefix (for Privy gas params). */
+function toHexGas(value: bigint): string {
+  return `0x${value.toString(16)}`;
+}
+
+// Pre-computed hex gas fee strings for Tempo Testnet.
+// Privy's API requires 0x-prefixed hex strings for gas params.
+const TEMPO_MAX_PRIORITY_FEE_HEX = toHexGas(TEMPO_MIN_BASE_FEE);
+const TEMPO_MAX_FEE_HEX = toHexGas(TEMPO_MIN_BASE_FEE * BigInt(3)); // 60 gwei headroom
+
 // ----------------------------------------------------------------
 // Read functions
 // ----------------------------------------------------------------
@@ -208,11 +218,6 @@ async function sendServerTx(data: Hex): Promise<{ hash: string }> {
   const privy = getPrivyClient();
   const walletId = SERVER_WALLET_ID();
 
-  // Tempo Testnet requires a minimum base fee of 20 gwei.
-  // Privy's SDK doesn't use viem's chain fee estimation, so we must set gas explicitly.
-  const maxPriorityFeePerGas = TEMPO_MIN_BASE_FEE.toString();
-  const maxFeePerGas = (TEMPO_MIN_BASE_FEE * BigInt(3)).toString(); // 60 gwei — generous headroom
-
   const result = await privy.wallets().ethereum().sendTransaction(walletId, {
     caip2: `eip155:${tempoTestnet.id}`,
     params: {
@@ -220,8 +225,8 @@ async function sendServerTx(data: Hex): Promise<{ hash: string }> {
         to: ESCROW_ADDRESS,
         data,
         type: 2, // EIP-1559
-        max_fee_per_gas: maxFeePerGas,
-        max_priority_fee_per_gas: maxPriorityFeePerGas,
+        max_fee_per_gas: TEMPO_MAX_FEE_HEX,
+        max_priority_fee_per_gas: TEMPO_MAX_PRIORITY_FEE_HEX,
       },
     },
   });
@@ -242,14 +247,9 @@ async function sendUserWalletTx(
   const rawKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY ?? '';
   const authPrivateKey = rawKey.replace(/^wallet-auth:/, '');
 
-  // Tempo Testnet requires a minimum base fee of 20 gwei.
-  const maxPriorityFeePerGas = TEMPO_MIN_BASE_FEE.toString();
-  const maxFeePerGas = (TEMPO_MIN_BASE_FEE * BigInt(3)).toString(); // 60 gwei
-
   console.log('[sendUserWalletTx] walletId:', privyWalletId);
   console.log('[sendUserWalletTx] to:', to);
-  console.log('[sendUserWalletTx] caip2:', `eip155:${tempoTestnet.id}`);
-  console.log('[sendUserWalletTx] authKeyPresent:', !!authPrivateKey, 'length:', authPrivateKey.length);
+  console.log('[sendUserWalletTx] maxFee:', TEMPO_MAX_FEE_HEX, 'maxPriorityFee:', TEMPO_MAX_PRIORITY_FEE_HEX);
 
   try {
     const result = await privy.wallets().ethereum().sendTransaction(privyWalletId, {
@@ -259,8 +259,8 @@ async function sendUserWalletTx(
           to,
           data,
           type: 2, // EIP-1559
-          max_fee_per_gas: maxFeePerGas,
-          max_priority_fee_per_gas: maxPriorityFeePerGas,
+          max_fee_per_gas: TEMPO_MAX_FEE_HEX,
+          max_priority_fee_per_gas: TEMPO_MAX_PRIORITY_FEE_HEX,
         },
       },
       authorization_context: {
