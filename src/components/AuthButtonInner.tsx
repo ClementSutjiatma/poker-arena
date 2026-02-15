@@ -9,7 +9,7 @@ import { AUSD_ADDRESS, tempoTestnet } from '@/lib/blockchain/chain-config';
 
 export default function AuthButtonInner() {
   const { ready, authenticated, user, login, logout } = usePrivy();
-  const { wallets } = useWallets();
+  const { ready: walletsReady, wallets } = useWallets();
 
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
   const walletAddress = embeddedWallet?.address as `0x${string}` | undefined;
@@ -52,7 +52,7 @@ export default function AuthButtonInner() {
     }
   }, [walletAddress, minting, refetchBalance]);
 
-  if (!ready) {
+  if (!ready || (authenticated && !walletsReady)) {
     return (
       <div className="h-8 w-20 bg-gray-800 rounded-lg animate-pulse" />
     );

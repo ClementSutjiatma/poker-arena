@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useWallets } from '@privy-io/react-auth';
+import { useWallets, usePrivy } from '@privy-io/react-auth';
 import { useReadContract } from 'wagmi';
 import { formatUnits } from 'viem';
 import { ERC20_ABI } from '@/lib/blockchain/abi';
@@ -14,7 +14,8 @@ interface OnboardingModalProps {
 }
 
 export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
-  const { wallets } = useWallets();
+  const { ready: walletsReady, wallets } = useWallets();
+  const { createWallet } = usePrivy();
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
   const walletAddress = embeddedWallet?.address as `0x${string}` | undefined;
 
@@ -201,10 +202,24 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
               </button>
             </div>
 
-            {!walletAddress && (
-              <p className="text-xs text-gray-600 mt-3 text-center">
-                Waiting for wallet to be created...
-              </p>
+            {!walletAddress && walletsReady && (
+              <div className="mt-3 text-center">
+                <p className="text-xs text-gray-500 mb-2">
+                  No embedded wallet found.
+                </p>
+                <button
+                  onClick={() => createWallet()}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
+                >
+                  Create wallet
+                </button>
+              </div>
+            )}
+            {!walletAddress && !walletsReady && (
+              <div className="flex items-center justify-center gap-2 mt-3">
+                <div className="w-3 h-3 border-2 border-gray-500 border-t-emerald-400 rounded-full animate-spin" />
+                <p className="text-xs text-gray-500">Loading wallet...</p>
+              </div>
             )}
           </>
         )}
