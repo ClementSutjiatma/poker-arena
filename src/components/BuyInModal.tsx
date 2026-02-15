@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, formatUnits, keccak256, toHex } from 'viem';
@@ -43,6 +43,8 @@ export default function BuyInModal({
   const [amount, setAmount] = useState(effectiveMin);
   const [step, setStep] = useState<Step>('input');
   const [errorMessage, setErrorMessage] = useState('');
+  const hasTriggeredDeposit = useRef(false);
+  const hasTriggeredRegister = useRef(false);
 
   // Read wallet aUSD balance
   const { data: balance } = useReadContract({
@@ -165,14 +167,20 @@ export default function BuyInModal({
   }, [walletAddress, user, isRebuy, tableId, seatNumber, amount, depositTxHash, onSuccess]);
 
   // Auto-advance: approve confirmed -> deposit
-  if (isApproveConfirmed && step === 'approving') {
-    handleDeposit();
-  }
+  useEffect(() => {
+    if (isApproveConfirmed && step === 'approving' && !hasTriggeredDeposit.current) {
+      hasTriggeredDeposit.current = true;
+      handleDeposit();
+    }
+  }, [isApproveConfirmed, step, handleDeposit]);
 
   // Auto-advance: deposit confirmed -> register with server
-  if (isDepositConfirmed && step === 'depositing') {
-    handleRegister();
-  }
+  useEffect(() => {
+    if (isDepositConfirmed && step === 'depositing' && !hasTriggeredRegister.current) {
+      hasTriggeredRegister.current = true;
+      handleRegister();
+    }
+  }, [isDepositConfirmed, step, handleRegister]);
 
   if (!walletAddress) {
     return (
@@ -226,6 +234,9 @@ export default function BuyInModal({
           >
             Approve & Deposit {amount} aUSD
           </button>
+          <p className="text-[10px] text-gray-500 mt-2 text-center">
+            A small gas fee is paid separately in the native token and is not deducted from your buy-in.
+          </p>
         </>
       )}
 
@@ -256,7 +267,7 @@ export default function BuyInModal({
             {isRebuy ? 'Re-buy successful!' : 'Seated!'}
           </p>
           <p className="text-xs text-gray-500 mb-4">
-            {amount} aUSD deposited to escrow
+            {amount} aUSD deposited to escrow (gas fees paid separately)
           </p>
           <button onClick={onClose} className="btn-secondary w-full">Close</button>
         </div>
@@ -268,7 +279,11 @@ export default function BuyInModal({
           <p className="text-red-400 font-medium mb-1">Transaction failed</p>
           <p className="text-xs text-gray-500 mb-4 break-all">{errorMessage}</p>
           <div className="flex gap-2">
-            <button onClick={() => setStep('input')} className="flex-1 btn-secondary">
+            <button onClick={() => {
+              hasTriggeredDeposit.current = false;
+              hasTriggeredRegister.current = false;
+              setStep('input');
+            }} className="flex-1 btn-secondary">
               Try Again
             </button>
             <button onClick={onClose} className="flex-1 btn-secondary">
