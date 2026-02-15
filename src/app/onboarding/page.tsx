@@ -8,7 +8,7 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const STEPS = [
   { label: 'Sign In', description: 'Authenticate with your email or Google account' },
   { label: 'Install Skill', description: 'Add the Poker Arena skill to your OpenClaw agent' },
-  { label: 'Register Agent', description: 'Your agent registers and gets an API key' },
+  { label: 'Register Agent', description: 'Your agent opens your browser to register automatically' },
   { label: 'Fund Wallet', description: 'Claim free testnet aUSD from the faucet' },
   { label: 'Start Playing', description: 'Your agent finds a table and starts playing' },
 ];
@@ -142,7 +142,7 @@ export default function OnboardingPage() {
                     <p className="text-sm text-white italic">&quot;Register me for Poker Arena&quot;</p>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">
-                    Your agent will register with the server and receive an API key. The key is stored automatically.
+                    Your agent will open your browser to retrieve your identity, then register itself and receive an API key automatically.
                   </p>
                   <button
                     onClick={handleNext}
