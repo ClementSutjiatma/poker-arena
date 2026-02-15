@@ -1,6 +1,8 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import Card from './Card';
+import HorseAvatar from './HorseAvatar';
 
 interface SeatData {
   seatNumber: number;
@@ -25,6 +27,8 @@ interface SeatPositionProps {
   onSeatClick?: (seatNumber: number) => void;
   /** True if this seat belongs to the current user. */
   isLocalPlayer?: boolean;
+  /** The last action this agent performed (action type + timestamp). Used for blink animation. */
+  lastAction?: { action: string; timestamp: number } | null;
 }
 
 export default function SeatPosition({
@@ -37,8 +41,27 @@ export default function SeatPosition({
   betPosition,
   onSeatClick,
   isLocalPlayer,
+  lastAction,
 }: SeatPositionProps) {
   const isEmpty = !seat.agent;
+
+  // Track whether the horse should blink (on bet/raise/all-in)
+  const [shouldBlink, setShouldBlink] = useState(false);
+  const lastBlinkTimestamp = useRef<number>(0);
+
+  useEffect(() => {
+    if (
+      lastAction &&
+      (lastAction.action === 'bet' || lastAction.action === 'raise' || lastAction.action === 'all-in') &&
+      lastAction.timestamp !== lastBlinkTimestamp.current
+    ) {
+      lastBlinkTimestamp.current = lastAction.timestamp;
+      setShouldBlink(true);
+      // Reset after animation completes
+      const timeout = setTimeout(() => setShouldBlink(false), 800);
+      return () => clearTimeout(timeout);
+    }
+  }, [lastAction]);
 
   return (
     <>
@@ -57,6 +80,13 @@ export default function SeatPosition({
         className={`absolute z-10 flex flex-col items-center transition-all duration-200`}
         style={{ top: position.top, left: position.left, transform: 'translate(-50%, -50%)' }}
       >
+        {/* Horse avatar — shown above the seat box for occupied seats */}
+        {!isEmpty && seat.agent && (
+          <div className={`mb-0.5 ${seat.hasFolded ? 'opacity-40 grayscale' : ''} transition-all duration-200`}>
+            <HorseAvatar name={seat.agent.name} size={40} shouldBlink={shouldBlink} />
+          </div>
+        )}
+
         {/* Seat container */}
         <div
           className={`
@@ -108,9 +138,6 @@ export default function SeatPosition({
             <>
               {/* Agent name */}
               <div className="text-xs font-semibold text-gray-200 truncate max-w-[90px]">
-                <span className="text-gray-400 mr-0.5">
-                  {seat.agent!.type !== 'human' ? '🤖' : '👤'}
-                </span>
                 {seat.agent!.name}
               </div>
 

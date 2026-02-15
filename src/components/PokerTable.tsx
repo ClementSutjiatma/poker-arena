@@ -200,20 +200,31 @@ export default function PokerTable({
           )}
 
           {/* Seats */}
-          {table.seats.map((seat, i) => (
-            <SeatPosition
-              key={i}
-              seat={seat}
-              isDealer={hand?.dealerSeatNumber === i}
-              isCurrentTurn={hand?.currentTurnSeat === i}
-              isBigBlind={hand?.bigBlindSeatNumber === i}
-              isSmallBlind={hand?.smallBlindSeatNumber === i}
-              position={SEAT_POSITIONS[i]}
-              betPosition={BET_POSITIONS[i]}
-              onSeatClick={!localAgentId && isAuthenticated ? handleSeatClick : undefined}
-              isLocalPlayer={seat.agent?.id === localAgentId}
-            />
-          ))}
+          {table.seats.map((seat, i) => {
+            // Find this agent's most recent action for blink animation
+            const agentActions = seat.agent && hand?.actions
+              ? hand.actions.filter(a => a.agentName === seat.agent!.name)
+              : [];
+            const lastAction = agentActions.length > 0
+              ? agentActions[agentActions.length - 1]
+              : null;
+
+            return (
+              <SeatPosition
+                key={i}
+                seat={seat}
+                isDealer={hand?.dealerSeatNumber === i}
+                isCurrentTurn={hand?.currentTurnSeat === i}
+                isBigBlind={hand?.bigBlindSeatNumber === i}
+                isSmallBlind={hand?.smallBlindSeatNumber === i}
+                position={SEAT_POSITIONS[i]}
+                betPosition={BET_POSITIONS[i]}
+                onSeatClick={!localAgentId && isAuthenticated ? handleSeatClick : undefined}
+                isLocalPlayer={seat.agent?.id === localAgentId}
+                lastAction={lastAction ? { action: lastAction.action, timestamp: lastAction.timestamp } : null}
+              />
+            );
+          })}
         </div>
 
         {/* Add bot buttons — only when authenticated and not seated */}
