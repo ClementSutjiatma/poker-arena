@@ -42,158 +42,176 @@ function hslToHex(h: number, s: number, l: number): string {
 
 /** Generate a unique horse color palette from a name. */
 function generatePalette(rng: () => number) {
-  // Body hue — warm earthy tones (browns, chestnuts, bays, grays, blacks, reds)
   const bodyHue = pick(rng, [20, 25, 30, 35, 15, 10, 0, 45, 50, 340, 350]);
-  const bodySat = 30 + Math.floor(rng() * 50); // 30-80
-  const bodyLit = 25 + Math.floor(rng() * 35); // 25-60
+  const bodySat = 30 + Math.floor(rng() * 50);
+  const bodyLit = 30 + Math.floor(rng() * 30);
 
   const body = hslToHex(bodyHue, bodySat, bodyLit);
-  const bodyDark = hslToHex(bodyHue, bodySat, Math.max(bodyLit - 15, 10));
-  const bodyLight = hslToHex(bodyHue, Math.max(bodySat - 10, 10), Math.min(bodyLit + 20, 80));
+  const bodyDark = hslToHex(bodyHue, bodySat, Math.max(bodyLit - 12, 12));
+  const bodyLight = hslToHex(bodyHue, Math.max(bodySat - 10, 10), Math.min(bodyLit + 18, 78));
 
-  // Mane — can be same family or contrasting
-  const maneHue = rng() > 0.5 ? bodyHue : pick(rng, [0, 30, 45, 55, 200, 210, 270, 330]);
-  const maneSat = 20 + Math.floor(rng() * 60);
-  const maneLit = 15 + Math.floor(rng() * 40);
+  const maneHue = rng() > 0.5 ? bodyHue : pick(rng, [0, 30, 45, 55, 200, 270, 330]);
+  const maneSat = 25 + Math.floor(rng() * 55);
+  const maneLit = 15 + Math.floor(rng() * 35);
   const mane = hslToHex(maneHue, maneSat, maneLit);
 
-  // Eye
   const eye = '#1a1a2e';
-  const eyeWhite = '#f0f0f0';
+  const eyeShine = '#ffffff';
+  const blush = '#e8808080'; // pink blush
 
-  // Nose/muzzle marking — lighter snout
-  const nose = hslToHex(bodyHue, Math.max(bodySat - 20, 5), Math.min(bodyLit + 30, 85));
+  const nose = hslToHex(bodyHue, Math.max(bodySat - 15, 8), Math.min(bodyLit + 25, 82));
 
-  // Accessory color — a festive CNY color
   const accessory = pick(rng, ['#d4263e', '#ff4d4d', '#ffcc00', '#ff6600', '#e83030', '#c41e3a']);
 
-  return { body, bodyDark, bodyLight, mane, eye, eyeWhite, nose, accessory };
+  return { body, bodyDark, bodyLight, mane, eye, eyeShine, blush, nose, accessory };
 }
 
 type Pixel = string | null;
 
+// Eye pixel coordinates for blink tracking
+interface EyeCoords {
+  pupils: [number, number][];
+  shines: [number, number][];
+}
+
 /**
- * Generate a 16x16 pixel art horse facing right.
- * Returns a flat array of 256 entries (row-major), each a hex color or null (transparent).
+ * Chibi-style 16x16 pixel art horse — front-facing, big head, cute proportions.
+ * Big round face taking up most of the canvas, tiny body, large sparkly eyes.
  */
-function generateHorsePixels(name: string): { pixels: Pixel[]; palette: ReturnType<typeof generatePalette> } {
+function generateHorsePixels(name: string): { pixels: Pixel[]; palette: ReturnType<typeof generatePalette>; eyeCoords: EyeCoords } {
   const seed = seedFromName(name);
   const rng = mulberry32(seed);
   const palette = generatePalette(rng);
-  const { body, bodyDark, bodyLight, mane, eye, eyeWhite, nose, accessory } = palette;
+  const { body, bodyDark, bodyLight, mane, eye, eyeShine, nose, accessory } = palette;
 
-  const _ = null; // transparent
   const B = body;
   const D = bodyDark;
   const L = bodyLight;
   const M = mane;
   const E = eye;
-  const W = eyeWhite;
+  const S = eyeShine;
   const N = nose;
   const A = accessory;
 
-  // Has blaze (white forehead marking)?
   const hasBlaze = rng() > 0.5;
-  // Has accessory (CNY ribbon/ornament on mane)?
-  const hasAccessory = rng() > 0.3;
-  // Ear style variant
-  const earStyle = Math.floor(rng() * 3);
+  const hasAccessory = rng() > 0.35;
+  const earVariant = Math.floor(rng() * 2); // 0 = pointy, 1 = round
+  const hasCheekBlush = rng() > 0.4;
 
-  // Build the 16x16 grid row by row
-  // Horse facing right, side profile, head top-right, legs bottom
   const grid: Pixel[][] = Array.from({ length: 16 }, () => Array(16).fill(null));
-
-  // Helper to set pixel if in bounds
   const set = (r: number, c: number, color: string) => {
     if (r >= 0 && r < 16 && c >= 0 && c < 16) grid[r][c] = color;
   };
 
-  // --- EARS (rows 0-2) ---
-  if (earStyle === 0) {
-    // Pointed ears
-    set(0, 10, M); set(0, 11, B);
-    set(1, 10, B); set(1, 11, B); set(1, 12, B);
-  } else if (earStyle === 1) {
-    // Rounded ears
-    set(0, 10, B); set(0, 11, B);
-    set(1, 9, B); set(1, 10, B); set(1, 11, B); set(1, 12, B);
+  // ==========================================
+  // CHIBI HORSE — front-facing, centered
+  // Big head rows 1-11, tiny body rows 12-13, stubby legs 14-15
+  // ==========================================
+
+  // --- EARS (rows 0-1) ---
+  if (earVariant === 0) {
+    // Pointy cute ears
+    set(0, 3, B);               set(0, 12, B);
+    set(1, 3, B); set(1, 4, B); set(1, 11, B); set(1, 12, B);
   } else {
-    // Tall ears
-    set(0, 11, M);
-    set(1, 10, B); set(1, 11, B);
-    set(2, 10, B); set(2, 11, B);
+    // Round ears
+    set(0, 3, B); set(0, 4, B); set(0, 11, B); set(0, 12, B);
+    set(1, 3, B); set(1, 4, L); set(1, 11, L); set(1, 12, B);
   }
 
-  // --- MANE (top of head / neck, rows 1-7) ---
+  // Mane tuft between ears
+  set(0, 6, M); set(0, 7, M); set(0, 8, M); set(0, 9, M);
+  set(1, 5, M); set(1, 6, M); set(1, 7, M); set(1, 8, M); set(1, 9, M); set(1, 10, M);
+
+  // CNY accessory on mane (little flower/ribbon)
   if (hasAccessory) {
-    set(1, 8, A); set(1, 9, A);
-    set(2, 7, A);
+    set(0, 7, A); set(0, 8, A);
+    set(1, 7, A);
   }
-  set(2, 8, M); set(2, 9, M);
-  set(3, 7, M); set(3, 8, M);
-  set(4, 6, M); set(4, 7, M);
-  set(5, 5, M); set(5, 6, M);
-  set(6, 4, M); set(6, 5, M);
-  set(7, 4, M);
 
-  // --- HEAD (rows 2-6) ---
-  // Forehead
-  set(2, 10, B); set(2, 11, B); set(2, 12, B);
-  if (hasBlaze) set(2, 11, L);
+  // --- HEAD (rows 2-9) — big round face ---
+  // Row 2: top of head
+  set(2, 4, B); set(2, 5, B); set(2, 6, B); set(2, 7, B);
+  set(2, 8, B); set(2, 9, B); set(2, 10, B); set(2, 11, B);
 
-  // Head main
-  set(3, 9, B); set(3, 10, B); set(3, 11, B); set(3, 12, B); set(3, 13, B);
-  if (hasBlaze) set(3, 11, L);
+  // Row 3
+  set(3, 3, B); set(3, 4, B); set(3, 5, B); set(3, 6, B); set(3, 7, B);
+  set(3, 8, B); set(3, 9, B); set(3, 10, B); set(3, 11, B); set(3, 12, B);
 
-  // Eye row
-  set(4, 8, B); set(4, 9, B); set(4, 10, W); set(4, 11, E); set(4, 12, B); set(4, 13, B);
+  // Forehead blaze
+  if (hasBlaze) {
+    set(3, 7, L); set(3, 8, L);
+  }
 
-  // Cheek
-  set(5, 7, B); set(5, 8, B); set(5, 9, B); set(5, 10, B); set(5, 11, B); set(5, 12, B); set(5, 13, N);
+  // Row 4: forehead
+  set(4, 3, B); set(4, 4, B); set(4, 5, B); set(4, 6, B); set(4, 7, B);
+  set(4, 8, B); set(4, 9, B); set(4, 10, B); set(4, 11, B); set(4, 12, B);
+  if (hasBlaze) {
+    set(4, 7, L); set(4, 8, L);
+  }
 
-  // Muzzle
-  set(6, 8, B); set(6, 9, B); set(6, 10, B); set(6, 11, N); set(6, 12, N); set(6, 13, N);
-  // Nostril
-  set(6, 12, D);
+  // Row 5: EYE ROW — big cute eyes with shine
+  set(5, 3, B); set(5, 4, B);
+  // Left eye: 2x2 dark pupil with shine
+  set(5, 5, E); set(5, 6, E);
+  set(5, 7, B); set(5, 8, B);
+  // Right eye: 2x2 dark pupil with shine
+  set(5, 9, E); set(5, 10, E);
+  set(5, 11, B); set(5, 12, B);
 
-  // Chin / jaw
-  set(7, 7, B); set(7, 8, B); set(7, 9, B); set(7, 10, B); set(7, 11, N);
+  // Row 6: bottom of eyes + shine dots
+  set(6, 3, B); set(6, 4, B);
+  set(6, 5, E); set(6, 6, S); // left eye bottom + shine
+  set(6, 7, B); set(6, 8, B);
+  set(6, 9, E); set(6, 10, S); // right eye bottom + shine
+  set(6, 11, B); set(6, 12, B);
 
-  // --- NECK (rows 7-9) ---
-  set(7, 5, B); set(7, 6, B);
-  set(8, 4, B); set(8, 5, B); set(8, 6, B); set(8, 7, B); set(8, 8, B); set(8, 9, B);
-  set(9, 3, B); set(9, 4, B); set(9, 5, B); set(9, 6, B); set(9, 7, B); set(9, 8, B); set(9, 9, B);
+  // Row 7: cheeks + blush
+  set(7, 3, B); set(7, 4, B); set(7, 5, B); set(7, 6, B); set(7, 7, B);
+  set(7, 8, B); set(7, 9, B); set(7, 10, B); set(7, 11, B); set(7, 12, B);
+  if (hasCheekBlush) {
+    set(7, 4, '#e8a0a0'); set(7, 5, '#e8a0a0'); // left blush
+    set(7, 10, '#e8a0a0'); set(7, 11, '#e8a0a0'); // right blush
+  }
 
-  // --- BODY (rows 10-12) ---
-  set(10, 2, B); set(10, 3, B); set(10, 4, B); set(10, 5, B); set(10, 6, B); set(10, 7, B);
-  set(10, 8, B); set(10, 9, B); set(10, 10, B); set(10, 11, B);
-  set(11, 2, B); set(11, 3, B); set(11, 4, B); set(11, 5, D); set(11, 6, B); set(11, 7, B);
-  set(11, 8, B); set(11, 9, D); set(11, 10, B); set(11, 11, B); set(11, 12, B);
-  set(12, 2, B); set(12, 3, D); set(12, 4, B); set(12, 5, B); set(12, 6, B); set(12, 7, B);
-  set(12, 8, B); set(12, 9, B); set(12, 10, D); set(12, 11, B); set(12, 12, B);
+  // Row 8: snout area
+  set(8, 4, B); set(8, 5, B); set(8, 6, N); set(8, 7, N);
+  set(8, 8, N); set(8, 9, N); set(8, 10, B); set(8, 11, B);
 
-  // Tail (left side, rows 9-12)
-  set(9, 1, M); set(9, 2, M);
-  set(10, 0, M); set(10, 1, M);
-  set(11, 0, M); set(11, 1, M);
-  set(12, 1, M);
+  // Row 9: muzzle — nostrils + cute little smile
+  set(9, 5, B); set(9, 6, N); set(9, 7, D); set(9, 8, D); set(9, 9, N); set(9, 10, B);
 
-  // --- LEGS (rows 13-15) ---
+  // Row 10: chin
+  set(10, 6, B); set(10, 7, B); set(10, 8, B); set(10, 9, B);
+
+  // --- BODY (rows 11-12) — small compact body ---
+  set(11, 5, B); set(11, 6, B); set(11, 7, B); set(11, 8, B); set(11, 9, B); set(11, 10, B);
+  set(12, 5, B); set(12, 6, D); set(12, 7, B); set(12, 8, B); set(12, 9, D); set(12, 10, B);
+
+  // Mane flowing down sides
+  set(2, 3, M); set(2, 12, M);
+  set(3, 2, M); set(3, 13, M);
+  set(4, 2, M); set(4, 13, M);
+  set(5, 2, M);
+  set(6, 2, M);
+
+  // --- LEGS (rows 13-15) — short stubby legs ---
   // Front legs
-  set(13, 8, D); set(13, 9, D); set(13, 11, D); set(13, 12, D);
-  set(14, 8, D); set(14, 9, D); set(14, 11, D); set(14, 12, D);
+  set(13, 5, D); set(13, 6, D);       set(13, 9, D); set(13, 10, D);
+  set(14, 5, D); set(14, 6, D);       set(14, 9, D); set(14, 10, D);
   // Hooves
-  set(15, 8, bodyDark); set(15, 9, bodyDark); set(15, 11, bodyDark); set(15, 12, bodyDark);
+  set(15, 5, bodyDark); set(15, 6, bodyDark); set(15, 9, bodyDark); set(15, 10, bodyDark);
 
-  // Back legs
-  set(13, 2, D); set(13, 3, D); set(13, 5, D); set(13, 6, D);
-  set(14, 2, D); set(14, 3, D); set(14, 5, D); set(14, 6, D);
-  set(15, 2, bodyDark); set(15, 3, bodyDark); set(15, 5, bodyDark); set(15, 6, bodyDark);
+  // Tail (tiny cute tail poking out right)
+  set(11, 11, M); set(11, 12, M);
+  set(12, 12, M); set(12, 13, M);
 
-  // Belly shading
-  set(13, 4, D); set(13, 7, D); set(13, 10, D);
+  const eyeCoords: EyeCoords = {
+    pupils: [[5, 5], [5, 6], [5, 9], [5, 10], [6, 5], [6, 9]],
+    shines: [[6, 6], [6, 10]],
+  };
 
-  return { pixels: grid.flat(), palette };
+  return { pixels: grid.flat(), palette, eyeCoords };
 }
 
 interface HorseAvatarProps {
@@ -204,7 +222,7 @@ interface HorseAvatarProps {
 }
 
 export default function HorseAvatar({ name, size = 48, shouldBlink = false }: HorseAvatarProps) {
-  const { pixels, palette } = generateHorsePixels(name);
+  const { pixels, palette, eyeCoords } = generateHorsePixels(name);
   const [eyesClosed, setEyesClosed] = useState(false);
   const blinkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevBlinkRef = useRef(shouldBlink);
@@ -242,12 +260,9 @@ export default function HorseAvatar({ name, size = 48, shouldBlink = false }: Ho
     return () => clearInterval(interval);
   }, []);
 
-  const pixelSize = size / 16;
-
-  // Eye pixel location (row 4, col 11 is the pupil)
-  const eyeRow = 4;
-  const eyeCol = 11;
-  const eyeWhiteCol = 10;
+  // Build lookup sets for eye coordinates
+  const pupilSet = new Set(eyeCoords.pupils.map(([r, c]) => `${r},${c}`));
+  const shineSet = new Set(eyeCoords.shines.map(([r, c]) => `${r},${c}`));
 
   return (
     <div
@@ -259,50 +274,36 @@ export default function HorseAvatar({ name, size = 48, shouldBlink = false }: Ho
         width={size}
         height={size}
         viewBox="0 0 16 16"
-        style={{ imageRendering: 'pixelated' }}
+        shapeRendering="crispEdges"
         xmlns="http://www.w3.org/2000/svg"
       >
         {pixels.map((color, i) => {
           if (!color) return null;
           const row = Math.floor(i / 16);
           const col = i % 16;
+          const key = `${row},${col}`;
 
-          // Handle eye pixels — override when blinking
-          if (row === eyeRow && col === eyeCol) {
-            return (
-              <rect
-                key={i}
-                x={col}
-                y={row}
-                width={1}
-                height={1}
-                fill={eyesClosed ? palette.body : palette.eye}
-              />
-            );
-          }
-          if (row === eyeRow && col === eyeWhiteCol) {
-            return (
-              <rect
-                key={i}
-                x={col}
-                y={row}
-                width={1}
-                height={1}
-                fill={eyesClosed ? palette.body : palette.eyeWhite}
-              />
-            );
+          // When eyes closed: pupils become a horizontal line (body color),
+          // shines disappear (body color)
+          if (pupilSet.has(key)) {
+            if (eyesClosed) {
+              // Show a closed-eye line only on the bottom row of the eye (row 6)
+              if (row === 6) {
+                return <rect key={i} x={col} y={row} width={1} height={1} fill={palette.eye} />;
+              }
+              return <rect key={i} x={col} y={row} width={1} height={1} fill={palette.body} />;
+            }
+            return <rect key={i} x={col} y={row} width={1} height={1} fill={palette.eye} />;
           }
 
-          return (
-            <rect
-              key={i}
-              x={col}
-              y={row}
-              width={1}
-              height={1}
-              fill={color}
-            />
-          );
+          if (shineSet.has(key)) {
+            if (eyesClosed) {
+              return <rect key={i} x={col} y={row} width={1} height={1} fill={palette.body} />;
+            }
+            return <rect key={i} x={col} y={row} width={1} height={1} fill={palette.eyeShine} />;
+          }
+
+          return <rect key={i} x={col} y={row} width={1} height={1} fill={color} />;
         })}
       </svg>
     </div>
