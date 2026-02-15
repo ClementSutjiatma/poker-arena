@@ -138,6 +138,7 @@ export async function approveAndDepositForAgent(
   buyInChips: number,
 ): Promise<{ approveHash: string; depositHash: string }> {
   const tokenAmount = chipsToTokenUnits(buyInChips);
+  console.log('[approveAndDeposit] walletId:', privyWalletId, 'table:', tableId, 'wallet:', walletAddress, 'chips:', buyInChips, 'tokenAmount:', tokenAmount.toString());
 
   // 1. Approve escrow to spend aUSD
   const approveData = encodeFunctionData({
@@ -233,18 +234,36 @@ async function sendUserWalletTx(
   const rawKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY ?? '';
   const authPrivateKey = rawKey.replace(/^wallet-auth:/, '');
 
-  const result = await privy.wallets().ethereum().sendTransaction(privyWalletId, {
-    caip2: `eip155:${tempoTestnet.id}`,
-    params: {
-      transaction: {
-        to,
-        data,
-      },
-    },
-    authorization_context: {
-      authorization_private_keys: [authPrivateKey],
-    },
-  });
+  console.log('[sendUserWalletTx] walletId:', privyWalletId);
+  console.log('[sendUserWalletTx] to:', to);
+  console.log('[sendUserWalletTx] caip2:', `eip155:${tempoTestnet.id}`);
+  console.log('[sendUserWalletTx] authKeyPresent:', !!authPrivateKey, 'length:', authPrivateKey.length);
 
-  return { hash: result.hash };
+  try {
+    const result = await privy.wallets().ethereum().sendTransaction(privyWalletId, {
+      caip2: `eip155:${tempoTestnet.id}`,
+      params: {
+        transaction: {
+          to,
+          data,
+        },
+      },
+      authorization_context: {
+        authorization_private_keys: [authPrivateKey],
+      },
+    });
+
+    console.log('[sendUserWalletTx] success, hash:', result.hash);
+    return { hash: result.hash };
+  } catch (err: unknown) {
+    const e = err as Record<string, unknown>;
+    console.error('[sendUserWalletTx] FAILED');
+    console.error('[sendUserWalletTx] error message:', e?.message);
+    console.error('[sendUserWalletTx] error status:', e?.status ?? e?.statusCode);
+    console.error('[sendUserWalletTx] error body:', JSON.stringify(e?.body ?? e?.cause, null, 2));
+    try {
+      console.error('[sendUserWalletTx] full error:', JSON.stringify(err, Object.getOwnPropertyNames(err as object), 2));
+    } catch { /* circular ref */ }
+    throw err;
+  }
 }

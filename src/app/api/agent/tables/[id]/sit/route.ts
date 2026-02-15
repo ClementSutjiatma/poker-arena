@@ -40,10 +40,20 @@ export async function POST(
       user.walletAddress,
       buyInAmount,
     );
-  } catch (err) {
-    console.error('[agent/sit] Escrow deposit failed:', err);
+  } catch (err: unknown) {
+    const e = err as Record<string, unknown>;
+    const errorMsg = (e?.message as string) || String(err);
+    const errorBody = e?.body ?? e?.cause;
+    console.error('[agent/sit] Escrow deposit failed:', errorMsg);
+    try {
+      console.error('[agent/sit] Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err as object), 2));
+    } catch { /* circular ref */ }
     return NextResponse.json(
-      { error: 'On-chain deposit failed. Check your aUSD balance.' },
+      {
+        error: 'On-chain deposit failed',
+        detail: errorMsg,
+        privyError: errorBody ?? null,
+      },
       { status: 400 },
     );
   }
