@@ -219,9 +219,11 @@ interface HorseAvatarProps {
   size?: number;
   /** When true, the horse closes its eyes briefly (blink animation). */
   shouldBlink?: boolean;
+  /** When true, renders a golden crown above the horse's head. */
+  hasCrown?: boolean;
 }
 
-export default function HorseAvatar({ name, size = 48, shouldBlink = false }: HorseAvatarProps) {
+export default function HorseAvatar({ name, size = 48, shouldBlink = false, hasCrown = false }: HorseAvatarProps) {
   const { pixels, palette, eyeCoords } = generateHorsePixels(name);
   const [eyesClosed, setEyesClosed] = useState(false);
   const blinkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -267,13 +269,13 @@ export default function HorseAvatar({ name, size = 48, shouldBlink = false }: Ho
   return (
     <div
       className="relative flex-shrink-0"
-      style={{ width: size, height: size, imageRendering: 'pixelated' }}
+      style={{ width: size, height: hasCrown ? size * 1.4 : size, imageRendering: 'pixelated' }}
       title={name}
     >
       <svg
         width={size}
-        height={size}
-        viewBox="0 0 16 16"
+        height={hasCrown ? size * 1.4 : size}
+        viewBox={hasCrown ? '0 -7 16 23' : '0 0 16 16'}
         shapeRendering="crispEdges"
         xmlns="http://www.w3.org/2000/svg"
       >
@@ -305,6 +307,26 @@ export default function HorseAvatar({ name, size = 48, shouldBlink = false }: Ho
 
           return <rect key={i} x={col} y={row} width={1} height={1} fill={color} />;
         })}
+
+        {/* Golden crown for winning streak holder */}
+        {hasCrown && (
+          <g>
+            {/* Crown base */}
+            <rect x={4} y={-3} width={8} height={2} fill="#ffd700" />
+            {/* Crown points */}
+            <rect x={4} y={-5} width={1} height={2} fill="#ffd700" />
+            <rect x={7} y={-6} width={2} height={3} fill="#ffd700" />
+            <rect x={11} y={-5} width={1} height={2} fill="#ffd700" />
+            {/* Crown jewels */}
+            <rect x={5} y={-4} width={1} height={1} fill="#ff3030" />
+            <rect x={7} y={-5} width={2} height={1} fill="#ff3030" />
+            <rect x={10} y={-4} width={1} height={1} fill="#ff3030" />
+            {/* Sparkle highlights */}
+            <rect x={5} y={-5} width={1} height={1} fill="#fff8b0" />
+            <rect x={8} y={-6} width={1} height={1} fill="#fff8b0" />
+            <rect x={10} y={-5} width={1} height={1} fill="#fff8b0" />
+          </g>
+        )}
       </svg>
     </div>
   );

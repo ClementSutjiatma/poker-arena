@@ -29,6 +29,8 @@ interface SeatPositionProps {
   isLocalPlayer?: boolean;
   /** The last action this agent performed (action type + timestamp). Used for blink animation. */
   lastAction?: { action: string; timestamp: number } | null;
+  /** Whether this agent holds the winning streak crown. */
+  hasCrown?: boolean;
 }
 
 export default function SeatPosition({
@@ -42,6 +44,7 @@ export default function SeatPosition({
   onSeatClick,
   isLocalPlayer,
   lastAction,
+  hasCrown,
 }: SeatPositionProps) {
   const isEmpty = !seat.agent;
 
@@ -83,7 +86,7 @@ export default function SeatPosition({
         {/* Horse avatar — shown above the seat box for occupied seats */}
         {!isEmpty && seat.agent && (
           <div className={`mb-0.5 ${seat.hasFolded ? 'opacity-40 grayscale' : ''} transition-all duration-200`}>
-            <HorseAvatar name={seat.agent.name} size={40} shouldBlink={shouldBlink} />
+            <HorseAvatar name={seat.agent.name} size={40} shouldBlink={shouldBlink} hasCrown={hasCrown} />
           </div>
         )}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CommunityCards } from './Card';
 import SeatPosition from './SeatPosition';
 import ActionLog from './ActionLog';
@@ -99,6 +99,37 @@ export default function PokerTable({
   const hasEmptySeat = table.seats.some(s => !s.agent);
 
   const [buyInModal, setBuyInModal] = useState<{ seatNumber: number; isRebuy: boolean } | null>(null);
+
+  // --- Winning streak crown tracking ---
+  // Track who holds the crown (longest current winning streak).
+  // crownHolder is the agentName of the current streak leader.
+  // streak counts consecutive wins. Crown shows when streak >= 2.
+  const [crownHolder, setCrownHolder] = useState<string | null>(null);
+  const [streak, setStreak] = useState(0);
+  const lastProcessedHand = useRef<number>(0);
+
+  useEffect(() => {
+    // Only process when we see a showdown with winners
+    if (!hand || hand.phase !== 'showdown' || hand.winners.length === 0) return;
+    if (hand.handNumber === lastProcessedHand.current) return;
+    lastProcessedHand.current = hand.handNumber;
+
+    // The primary winner is whoever won the most chips (main pot winner)
+    const primaryWinner = hand.winners.reduce((best, w) =>
+      w.amount > best.amount ? w : best, hand.winners[0]);
+
+    if (primaryWinner.agentName === crownHolder) {
+      // Same player wins again — extend streak
+      setStreak(s => s + 1);
+    } else {
+      // New winner — they start a new streak
+      setCrownHolder(primaryWinner.agentName);
+      setStreak(1);
+    }
+  }, [hand?.phase, hand?.handNumber, hand?.winners, crownHolder]);
+
+  // Crown is shown when an agent has won 2+ hands in a row
+  const crownAgentName = streak >= 2 ? crownHolder : null;
 
   // Find the local player's seat
   const localSeat = localAgentId
@@ -222,6 +253,7 @@ export default function PokerTable({
                 onSeatClick={!localAgentId && isAuthenticated ? handleSeatClick : undefined}
                 isLocalPlayer={seat.agent?.id === localAgentId}
                 lastAction={lastAction ? { action: lastAction.action, timestamp: lastAction.timestamp } : null}
+                hasCrown={crownAgentName !== null && seat.agent?.name === crownAgentName}
               />
             );
           })}
