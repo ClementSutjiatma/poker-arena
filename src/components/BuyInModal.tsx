@@ -6,6 +6,7 @@ import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 
 import { parseUnits, formatUnits, keccak256, toHex } from 'viem';
 import { ERC20_ABI, POKER_ESCROW_ABI } from '@/lib/blockchain/abi';
 import { AUSD_ADDRESS, ESCROW_ADDRESS, tempoTestnet } from '@/lib/blockchain/chain-config';
+import { usePublicClient } from 'wagmi';
 
 type Step = 'input' | 'approving' | 'depositing' | 'registering' | 'done' | 'error';
 
@@ -57,7 +58,7 @@ export default function BuyInModal({
   });
 
   // Read current allowance so we can skip approve if already sufficient
-  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+  const { refetch: refetchAllowance } = useReadContract({
     address: AUSD_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'allowance',
@@ -89,68 +90,15 @@ export default function BuyInModal({
   const tableIdBytes32 = keccak256(toHex(tableId));
   const amountInTokenUnits = parseUnits(amount.toString(), 6);
 
+  const publicClient = usePublicClient({ chainId: tempoTestnet.id });
+
   const formattedBalance = balance !== undefined
     ? parseFloat(formatUnits(balance, 6))
     : 0;
 
-  // Gas limit for ERC-20 approve & escrow deposit/rebuy calls.
-  // Tempo Testnet gas *prices* are handled by the chain-level fees config in chain-config.ts.
-  // We only set an explicit gas limit here to avoid "intrinsic gas too low" errors.
-  const GAS_LIMIT = BigInt(150000); // 150k — generous for approve/deposit
-
-  const handleDeposit = useCallback(() => {
-    setStep('depositing');
-    const functionName = isRebuy ? 'rebuy' : 'deposit';
-    writeDeposit(
-      {
-        address: ESCROW_ADDRESS,
-        abi: POKER_ESCROW_ABI,
-        functionName,
-        args: [tableIdBytes32, amountInTokenUnits],
-        chainId: tempoTestnet.id,
-        gas: GAS_LIMIT,
-      },
-      {
-        onError: (err) => {
-          setStep('error');
-          setErrorMessage(err.message.slice(0, 200));
-        },
-      },
-    );
-  }, [writeDeposit, isRebuy, tableIdBytes32, amountInTokenUnits]);
-
-  const handleApprove = useCallback(async () => {
-    // Re-check allowance: if already sufficient, skip approve and go straight to deposit
-    try {
-      const { data: freshAllowance } = await refetchAllowance();
-      if (freshAllowance !== undefined && freshAllowance >= amountInTokenUnits) {
-        // Allowance already granted (e.g. from a previous approve that succeeded
-        // before deposit failed). Skip straight to deposit.
-        handleDeposit();
-        return;
-      }
-    } catch {
-      // Allowance check failed — proceed with approve anyway
-    }
-
-    setStep('approving');
-    writeApprove(
-      {
-        address: AUSD_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [ESCROW_ADDRESS, amountInTokenUnits],
-        chainId: tempoTestnet.id,
-        gas: GAS_LIMIT,
-      },
-      {
-        onError: (err) => {
-          setStep('error');
-          setErrorMessage(err.message.slice(0, 200));
-        },
-      },
-    );
-  }, [writeApprove, amountInTokenUnits, refetchAllowance, handleDeposit]);
+  // Gas prices are handled by the chain-level fees config in chain-config.ts.
+  // We do NOT set an explicit gas limit — let wagmi/viem estimate it naturally
+  // to avoid Privy wallet popup displaying incorrect dollar amounts.
 
   const handleRegister = useCallback(async () => {
     if (!walletAddress || !user) return;
@@ -195,6 +143,83 @@ export default function BuyInModal({
       setErrorMessage(err instanceof Error ? err.message : 'Network error');
     }
   }, [walletAddress, user, isRebuy, tableId, seatNumber, amount, depositTxHash, onSuccess]);
+
+  const handleDeposit = useCallback(() => {
+    setStep('depositing');
+    const functionName = isRebuy ? 'rebuy' : 'deposit';
+    writeDeposit(
+      {
+        address: ESCROW_ADDRESS,
+        abi: POKER_ESCROW_ABI,
+        functionName,
+        args: [tableIdBytes32, amountInTokenUnits],
+        chainId: tempoTestnet.id,
+      },
+      {
+        onError: (err) => {
+          setStep('error');
+          setErrorMessage(err.message.slice(0, 200));
+        },
+      },
+    );
+  }, [writeDeposit, isRebuy, tableIdBytes32, amountInTokenUnits]);
+
+  /** Check if the player is already seated on-chain (e.g. from a prior failed attempt). */
+  const checkAlreadySeated = useCallback(async (): Promise<boolean> => {
+    if (!publicClient || !walletAddress) return false;
+    try {
+      const result = await publicClient.readContract({
+        address: ESCROW_ADDRESS,
+        abi: POKER_ESCROW_ABI,
+        functionName: 'getPlayerSeat',
+        args: [tableIdBytes32, walletAddress],
+      });
+      // result is [balance, totalDeposited, isSeated]
+      const [, , isSeated] = result as [bigint, bigint, boolean];
+      return isSeated;
+    } catch {
+      return false;
+    }
+  }, [publicClient, walletAddress, tableIdBytes32]);
+
+  const handleApprove = useCallback(async () => {
+    // 1. Check if the player is already seated on-chain from a previous deposit.
+    //    If so, skip both approve and deposit — go straight to server registration.
+    const alreadySeated = await checkAlreadySeated();
+    if (alreadySeated) {
+      handleRegister();
+      return;
+    }
+
+    // 2. Check allowance: if already sufficient, skip approve and go to deposit
+    try {
+      const { data: freshAllowance } = await refetchAllowance();
+      if (freshAllowance !== undefined && freshAllowance >= amountInTokenUnits) {
+        handleDeposit();
+        return;
+      }
+    } catch {
+      // Allowance check failed — proceed with approve anyway
+    }
+
+    // 3. Send approve transaction
+    setStep('approving');
+    writeApprove(
+      {
+        address: AUSD_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [ESCROW_ADDRESS, amountInTokenUnits],
+        chainId: tempoTestnet.id,
+      },
+      {
+        onError: (err) => {
+          setStep('error');
+          setErrorMessage(err.message.slice(0, 200));
+        },
+      },
+    );
+  }, [writeApprove, amountInTokenUnits, refetchAllowance, handleDeposit, checkAlreadySeated, handleRegister]);
 
   // Auto-advance: approve confirmed -> deposit
   useEffect(() => {
