@@ -150,9 +150,9 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 'mint' && (
           <>
-            <h2 className="text-xl font-bold text-white mb-1">Fund Your Wallet</h2>
+            <h2 className="text-xl font-bold text-white mb-1">Get Testnet Tokens</h2>
             <p className="text-sm text-gray-400 mb-6">
-              Mint free testnet aUSD to start playing at the tables.
+              Claim free testnet aUSD from the faucet to start playing.
             </p>
 
             {/* Wallet info */}
@@ -176,7 +176,7 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
             {mintSuccess && (
               <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3 mb-4">
                 <p className="text-emerald-400 text-sm font-medium">
-                  Tokens minted successfully! Balance will update shortly.
+                  Testnet tokens claimed! Balance will update shortly.
                 </p>
               </div>
             )}
@@ -196,12 +196,12 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
                 {minting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Minting...
+                    Claiming...
                   </>
                 ) : mintSuccess ? (
-                  'Mint More'
+                  'Claim Again'
                 ) : (
-                  'Mint aUSD'
+                  'Claim aUSD'
                 )}
               </button>
 

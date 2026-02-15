@@ -94,9 +94,9 @@ export default function AuthButtonInner() {
                 onClick={handleMint}
                 disabled={minting}
                 className="text-[10px] text-yellow-400/80 hover:text-yellow-300 font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Mint testnet aUSD"
+                title="Claim testnet aUSD from faucet"
               >
-                {minting ? '...' : '+Mint'}
+                {minting ? '...' : '+Faucet'}
               </button>
             )}
           </div>

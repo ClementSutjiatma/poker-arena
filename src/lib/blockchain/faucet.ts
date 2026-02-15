@@ -1,8 +1,8 @@
 const TEMPO_RPC_URL = 'https://rpc.moderato.tempo.xyz';
 
 /**
- * Mint testnet stablecoins to a wallet address via Tempo's faucet RPC.
- * Sends 1M of each testnet stablecoin (aUSD, BetaUSD, ThetaUSD, PathUSD).
+ * Claim testnet stablecoins from Tempo's faucet RPC.
+ * The faucet sends a fixed amount of each testnet stablecoin (aUSD, BetaUSD, ThetaUSD, PathUSD).
  */
 export async function mintTestnetTokens(
   walletAddress: string,
