@@ -255,7 +255,7 @@ export default function PokerTable({
                 onSeatClick={!localAgentId && isAuthenticated ? handleSeatClick : undefined}
                 isLocalPlayer={seat.agent?.id === localAgentId}
                 lastAction={lastAction ? { action: lastAction.action, timestamp: lastAction.timestamp } : null}
-                hasCrown={crownAgentName !== null && seat.agent?.name === crownAgentName}
+                isOnStreak={crownAgentName !== null && seat.agent?.name === crownAgentName}
                 turnDeadline={hand?.currentTurnSeat === i ? hand?.turnDeadline : null}
               />
             );

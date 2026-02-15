@@ -219,11 +219,11 @@ interface HorseAvatarProps {
   size?: number;
   /** When true, the horse closes its eyes briefly (blink animation). */
   shouldBlink?: boolean;
-  /** When true, renders a golden crown above the horse's head. */
-  hasCrown?: boolean;
+  /** When true, renders a fire aura around the horse (winning streak). */
+  isOnStreak?: boolean;
 }
 
-export default function HorseAvatar({ name, size = 48, shouldBlink = false, hasCrown = false }: HorseAvatarProps) {
+export default function HorseAvatar({ name, size = 48, shouldBlink = false, isOnStreak = false }: HorseAvatarProps) {
   const { pixels, palette, eyeCoords } = generateHorsePixels(name);
   const [eyesClosed, setEyesClosed] = useState(false);
   const blinkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -268,16 +268,85 @@ export default function HorseAvatar({ name, size = 48, shouldBlink = false, hasC
 
   return (
     <div
-      className="relative flex-shrink-0"
-      style={{ width: size, height: hasCrown ? size * 1.4 : size, imageRendering: 'pixelated' }}
+      className={`relative flex-shrink-0 ${isOnStreak ? 'horse-on-fire' : ''}`}
+      style={{ width: size, height: size, imageRendering: 'pixelated' }}
       title={name}
     >
+      {/* Fire animation CSS */}
+      {isOnStreak && (
+        <style>{`
+          @keyframes fireFlicker {
+            0%, 100% { opacity: 0.9; transform: scaleY(1) translateY(0); }
+            25% { opacity: 1; transform: scaleY(1.1) translateY(-1px); }
+            50% { opacity: 0.85; transform: scaleY(0.95) translateY(1px); }
+            75% { opacity: 1; transform: scaleY(1.05) translateY(-2px); }
+          }
+          @keyframes fireGlow {
+            0%, 100% { box-shadow: 0 0 8px 3px rgba(255, 100, 0, 0.5), 0 0 16px 6px rgba(255, 60, 0, 0.25); }
+            50% { box-shadow: 0 0 12px 5px rgba(255, 120, 0, 0.6), 0 0 24px 8px rgba(255, 60, 0, 0.35); }
+          }
+          @keyframes emberRise {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-14px) scale(0.3); }
+          }
+          .horse-on-fire {
+            animation: fireGlow 0.8s ease-in-out infinite;
+            border-radius: 8px;
+          }
+          .fire-particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            animation: emberRise 1s ease-out infinite;
+            pointer-events: none;
+          }
+          .flame-layer {
+            position: absolute;
+            inset: -3px;
+            border-radius: 10px;
+            animation: fireFlicker 0.6s ease-in-out infinite;
+            pointer-events: none;
+          }
+        `}</style>
+      )}
+
+      {/* Fire layers behind the horse */}
+      {isOnStreak && (
+        <>
+          {/* Outer flame glow */}
+          <div
+            className="flame-layer"
+            style={{
+              background: 'radial-gradient(ellipse at center bottom, rgba(255,80,0,0.4) 0%, rgba(255,160,0,0.15) 40%, transparent 70%)',
+              animationDelay: '0s',
+            }}
+          />
+          {/* Inner flame glow */}
+          <div
+            className="flame-layer"
+            style={{
+              inset: '-1px',
+              background: 'radial-gradient(ellipse at center bottom, rgba(255,200,0,0.3) 0%, rgba(255,100,0,0.1) 35%, transparent 65%)',
+              animationDelay: '0.3s',
+            }}
+          />
+          {/* Ember particles */}
+          <div className="fire-particle" style={{ left: '15%', bottom: '60%', background: '#ff6600', animationDelay: '0s', animationDuration: '1.2s' }} />
+          <div className="fire-particle" style={{ left: '75%', bottom: '55%', background: '#ffaa00', animationDelay: '0.4s', animationDuration: '0.9s' }} />
+          <div className="fire-particle" style={{ left: '45%', bottom: '70%', background: '#ff4400', animationDelay: '0.7s', animationDuration: '1.1s' }} />
+          <div className="fire-particle" style={{ left: '30%', bottom: '45%', background: '#ffcc00', animationDelay: '0.2s', animationDuration: '1.3s' }} />
+          <div className="fire-particle" style={{ left: '60%', bottom: '50%', background: '#ff5500', animationDelay: '0.9s', animationDuration: '1.0s' }} />
+        </>
+      )}
+
       <svg
         width={size}
-        height={hasCrown ? size * 1.4 : size}
-        viewBox={hasCrown ? '0 -7 16 23' : '0 0 16 16'}
+        height={size}
+        viewBox="0 0 16 16"
         shapeRendering="crispEdges"
         xmlns="http://www.w3.org/2000/svg"
+        style={{ position: 'relative', zIndex: 1 }}
       >
         {pixels.map((color, i) => {
           if (!color) return null;
@@ -307,26 +376,6 @@ export default function HorseAvatar({ name, size = 48, shouldBlink = false, hasC
 
           return <rect key={i} x={col} y={row} width={1} height={1} fill={color} />;
         })}
-
-        {/* Golden crown for winning streak holder */}
-        {hasCrown && (
-          <g>
-            {/* Crown base */}
-            <rect x={4} y={-3} width={8} height={2} fill="#ffd700" />
-            {/* Crown points */}
-            <rect x={4} y={-5} width={1} height={2} fill="#ffd700" />
-            <rect x={7} y={-6} width={2} height={3} fill="#ffd700" />
-            <rect x={11} y={-5} width={1} height={2} fill="#ffd700" />
-            {/* Crown jewels */}
-            <rect x={5} y={-4} width={1} height={1} fill="#ff3030" />
-            <rect x={7} y={-5} width={2} height={1} fill="#ff3030" />
-            <rect x={10} y={-4} width={1} height={1} fill="#ff3030" />
-            {/* Sparkle highlights */}
-            <rect x={5} y={-5} width={1} height={1} fill="#fff8b0" />
-            <rect x={8} y={-6} width={1} height={1} fill="#fff8b0" />
-            <rect x={10} y={-5} width={1} height={1} fill="#fff8b0" />
-          </g>
-        )}
       </svg>
     </div>
   );
