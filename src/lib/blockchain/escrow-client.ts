@@ -150,6 +150,15 @@ export async function approveAndDepositForAgent(
   const tokenAmount = chipsToTokenUnits(buyInChips);
   console.log('[approveAndDeposit] walletId:', privyWalletId, 'table:', tableId, 'wallet:', walletAddress, 'chips:', buyInChips, 'tokenAmount:', tokenAmount.toString());
 
+  // Check if the player already has an on-chain deposit for this table.
+  // This can happen if the server restarted (losing in-memory game state) but the
+  // escrow still holds their funds from a previous session.
+  const existingBalance = await getPlayerOnChainBalance(tableId, walletAddress);
+  if (existingBalance > BigInt(0)) {
+    console.log('[approveAndDeposit] Player already has on-chain deposit:', existingBalance.toString(), '— skipping deposit');
+    return { approveHash: 'already-deposited', depositHash: 'already-deposited' };
+  }
+
   // 1. Approve escrow to spend aUSD
   const approveData = encodeFunctionData({
     abi: ERC20_ABI,
