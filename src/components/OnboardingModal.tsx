@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWallets, usePrivy } from '@privy-io/react-auth';
 import { useReadContract } from 'wagmi';
 import { formatUnits } from 'viem';
@@ -25,6 +25,17 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const [minting, setMinting] = useState(false);
   const [mintError, setMintError] = useState('');
   const [mintSuccess, setMintSuccess] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const walletCreationAttempted = useRef(false);
+
+  // Auto-create embedded wallet if none found after wallets are ready
+  useEffect(() => {
+    if (walletsReady && !walletAddress && !walletCreationAttempted.current) {
+      walletCreationAttempted.current = true;
+      setCreatingWallet(true);
+      createWallet().catch(() => {}).finally(() => setCreatingWallet(false));
+    }
+  }, [walletsReady, walletAddress, createWallet]);
 
   const { data: balance, refetch: refetchBalance } = useReadContract({
     address: AUSD_ADDRESS,
@@ -202,23 +213,12 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
               </button>
             </div>
 
-            {!walletAddress && walletsReady && (
-              <div className="mt-3 text-center">
-                <p className="text-xs text-gray-500 mb-2">
-                  No embedded wallet found.
-                </p>
-                <button
-                  onClick={() => createWallet()}
-                  className="text-xs text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
-                >
-                  Create wallet
-                </button>
-              </div>
-            )}
-            {!walletAddress && !walletsReady && (
+            {!walletAddress && (
               <div className="flex items-center justify-center gap-2 mt-3">
                 <div className="w-3 h-3 border-2 border-gray-500 border-t-emerald-400 rounded-full animate-spin" />
-                <p className="text-xs text-gray-500">Loading wallet...</p>
+                <p className="text-xs text-gray-500">
+                  {creatingWallet ? 'Creating wallet...' : 'Loading wallet...'}
+                </p>
               </div>
             )}
           </>
