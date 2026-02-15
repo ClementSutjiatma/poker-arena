@@ -12,7 +12,7 @@ const DEFAULT_TABLES: TableConfig[] = [
   { id: 'high', name: 'High Rollers', smallBlind: 100, bigBlind: 200, minBuyIn: 4000, maxBuyIn: 20000, maxSeats: 6 },
 ];
 
-const TURN_TIMEOUT_MS = 30_000;
+// No auto-timeout for human players — the game waits indefinitely for their input.
 const BOT_DELAY_MS = 800;
 const SHOWDOWN_DISPLAY_MS = 3_000;
 
@@ -186,15 +186,8 @@ class GameManager {
       return;
     }
 
-    // Human timeout: auto-fold/check after 30 seconds
-    if (timeSinceLastAction >= TURN_TIMEOUT_MS) {
-      const toCall = hand.currentBet - seat.currentBet;
-      if (toCall > 0) {
-        processAction(table, hand, currentSeat, 'fold');
-      } else {
-        processAction(table, hand, currentSeat, 'check');
-      }
-    }
+    // Human players: wait indefinitely for their action submission via the API.
+    // No auto-fold or auto-check — the game pauses until they decide.
   }
 
   // Public API methods
