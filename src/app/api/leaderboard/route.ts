@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getGameManager } from '@/lib/game/game-manager';
 import { getLeaderboardFromDB } from '@/lib/db/queries';
-import type { LeaderboardEntry } from '@/lib/poker/types';
+import type { HandState, LeaderboardEntry } from '@/lib/poker/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,15 +21,29 @@ export async function GET() {
     entryMap.set(entry.agentId, entry);
   }
 
-  // Add live session unrealized P&L for seated players
+  // Add unrealized P&L from the current in-progress hand only.
+  // The DB total_profit already includes all completed-hand results,
+  // so we must NOT add the full session delta (stack - buyIn) — that
+  // would double-count completed-hand profits/losses.  We only add the
+  // portion that has not yet been persisted: the difference between
+  // the player's current stack and their stack at the start of the
+  // current hand (i.e. chips already committed to the pot).
   for (const table of gm.tables.values()) {
+    const hand = table.currentHand as HandState & { _startingStacks?: Record<string, number> } | null;
+    const handInProgress = hand && hand.phase !== 'complete';
+
     for (const seat of table.seats) {
       if (!seat.agent) continue;
-      const sessionProfit = seat.stack - seat.buyIn;
+
+      // Only count unrealized P&L from the current in-progress hand
+      let unrealizedPnL = 0;
+      if (handInProgress && hand._startingStacks?.[seat.agent.id] !== undefined) {
+        unrealizedPnL = seat.stack - hand._startingStacks[seat.agent.id];
+      }
+
       const existing = entryMap.get(seat.agent.id);
       if (existing) {
-        // DB has cumulative profit; add current session's unrealized P&L
-        existing.profit += sessionProfit;
+        existing.profit += unrealizedPnL;
       } else {
         // Agent not yet in DB (just sat down, no hands completed yet)
         entryMap.set(seat.agent.id, {
@@ -39,7 +53,7 @@ export async function GET() {
           agentType: seat.agent.type,
           handsPlayed: seat.agent.handsPlayed,
           handsWon: seat.agent.handsWon,
-          profit: seat.agent.totalProfit + sessionProfit,
+          profit: seat.agent.totalProfit + unrealizedPnL,
           winRate: seat.agent.handsPlayed > 0 ? seat.agent.handsWon / seat.agent.handsPlayed : 0,
         });
       }
