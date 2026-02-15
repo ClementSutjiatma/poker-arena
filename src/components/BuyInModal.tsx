@@ -5,7 +5,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, formatUnits, keccak256, toHex } from 'viem';
 import { ERC20_ABI, POKER_ESCROW_ABI } from '@/lib/blockchain/abi';
-import { AUSD_ADDRESS, ESCROW_ADDRESS, tempoTestnet } from '@/lib/blockchain/chain-config';
+import { AUSD_ADDRESS, ESCROW_ADDRESS, tempoTestnet, TEMPO_MIN_BASE_FEE } from '@/lib/blockchain/chain-config';
 
 type Step = 'input' | 'approving' | 'depositing' | 'registering' | 'done' | 'error';
 
@@ -83,6 +83,14 @@ export default function BuyInModal({
     ? parseFloat(formatUnits(balance, 6))
     : 0;
 
+  // Explicit gas fee overrides for Tempo Testnet (minimum 20 gwei base fee).
+  // The chain config has fee estimation, but we also set explicit overrides
+  // as a safety net in case the embedded wallet ignores chain-level estimates.
+  const gasOverrides = {
+    maxFeePerGas: TEMPO_MIN_BASE_FEE * BigInt(3), // 60 gwei — generous headroom
+    maxPriorityFeePerGas: TEMPO_MIN_BASE_FEE, // 20 gwei
+  };
+
   const handleApprove = useCallback(() => {
     setStep('approving');
     writeApprove(
@@ -92,6 +100,7 @@ export default function BuyInModal({
         functionName: 'approve',
         args: [ESCROW_ADDRESS, amountInTokenUnits],
         chainId: tempoTestnet.id,
+        ...gasOverrides,
       },
       {
         onError: (err) => {
@@ -112,6 +121,7 @@ export default function BuyInModal({
         functionName,
         args: [tableIdBytes32, amountInTokenUnits],
         chainId: tempoTestnet.id,
+        ...gasOverrides,
       },
       {
         onError: (err) => {

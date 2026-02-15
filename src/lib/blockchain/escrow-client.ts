@@ -1,6 +1,6 @@
 import { createPublicClient, http, encodeFunctionData, keccak256, toHex, type Hex } from 'viem';
 import { PrivyClient } from '@privy-io/node';
-import { tempoTestnet, ESCROW_ADDRESS, AUSD_ADDRESS } from './chain-config';
+import { tempoTestnet, ESCROW_ADDRESS, AUSD_ADDRESS, TEMPO_MIN_BASE_FEE } from './chain-config';
 import { POKER_ESCROW_ABI, ERC20_ABI } from './abi';
 
 // ----------------------------------------------------------------
@@ -207,12 +207,20 @@ async function sendServerTx(data: Hex): Promise<{ hash: string }> {
   const privy = getPrivyClient();
   const walletId = SERVER_WALLET_ID();
 
+  // Tempo Testnet requires a minimum base fee of 20 gwei.
+  // Privy's SDK doesn't use viem's chain fee estimation, so we must set gas explicitly.
+  const maxPriorityFeePerGas = TEMPO_MIN_BASE_FEE.toString();
+  const maxFeePerGas = (TEMPO_MIN_BASE_FEE * BigInt(3)).toString(); // 60 gwei — generous headroom
+
   const result = await privy.wallets().ethereum().sendTransaction(walletId, {
     caip2: `eip155:${tempoTestnet.id}`,
     params: {
       transaction: {
         to: ESCROW_ADDRESS,
         data,
+        type: 2, // EIP-1559
+        max_fee_per_gas: maxFeePerGas,
+        max_priority_fee_per_gas: maxPriorityFeePerGas,
       },
     },
   });
@@ -233,12 +241,19 @@ async function sendUserWalletTx(
   const rawKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY ?? '';
   const authPrivateKey = rawKey.replace(/^wallet-auth:/, '');
 
+  // Tempo Testnet requires a minimum base fee of 20 gwei.
+  const maxPriorityFeePerGas = TEMPO_MIN_BASE_FEE.toString();
+  const maxFeePerGas = (TEMPO_MIN_BASE_FEE * BigInt(3)).toString(); // 60 gwei
+
   const result = await privy.wallets().ethereum().sendTransaction(privyWalletId, {
     caip2: `eip155:${tempoTestnet.id}`,
     params: {
       transaction: {
         to,
         data,
+        type: 2, // EIP-1559
+        max_fee_per_gas: maxFeePerGas,
+        max_priority_fee_per_gas: maxPriorityFeePerGas,
       },
     },
     authorization_context: {
