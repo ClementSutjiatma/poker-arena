@@ -85,7 +85,7 @@ export default function SeatPosition({
       >
         {/* Horse avatar — shown above the seat box for occupied seats */}
         {!isEmpty && seat.agent && (
-          <div className={`mb-0.5 ${seat.hasFolded ? 'opacity-40 grayscale' : ''} transition-all duration-200`}>
+          <div className={`mb-0.5 ${hasCrown ? 'z-30 relative' : ''} ${seat.hasFolded ? 'opacity-40 grayscale' : ''} transition-all duration-200`}>
             <HorseAvatar name={seat.agent.name} size={40} shouldBlink={shouldBlink} hasCrown={hasCrown} />
           </div>
         )}
