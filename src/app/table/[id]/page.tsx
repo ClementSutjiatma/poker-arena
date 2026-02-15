@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import PokerTable from '@/components/PokerTable';
 import Link from 'next/link';
 
@@ -45,6 +45,8 @@ export default function TablePage() {
   const params = useParams();
   const id = params.id as string;
   const { authenticated, login } = usePrivy();
+  const { wallets } = useWallets();
+  const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
   const [table, setTable] = useState<TableData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [localAgentId, setLocalAgentId] = useState<string | null>(() => {
@@ -54,8 +56,16 @@ export default function TablePage() {
     return null;
   });
   const [disconnected, setDisconnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(`poker_wallet_${id}`) || null;
+    }
+    return null;
+  });
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundResult, setRefundResult] = useState<string | null>(null);
 
-  // Persist agent ID to sessionStorage so it survives page refreshes
+  // Persist agent ID and wallet to sessionStorage so it survives page refreshes
   useEffect(() => {
     if (localAgentId) {
       sessionStorage.setItem(`poker_agent_${id}`, localAgentId);
@@ -63,6 +73,14 @@ export default function TablePage() {
       sessionStorage.removeItem(`poker_agent_${id}`);
     }
   }, [localAgentId, id]);
+
+  useEffect(() => {
+    if (walletAddress) {
+      sessionStorage.setItem(`poker_wallet_${id}`, walletAddress);
+    } else {
+      sessionStorage.removeItem(`poker_wallet_${id}`);
+    }
+  }, [walletAddress, id]);
 
   const fetchTable = useCallback(async () => {
     try {
@@ -111,11 +129,17 @@ export default function TablePage() {
 
   const handleSit = (agent: { id: string; name: string }) => {
     setLocalAgentId(agent.id);
+    // Store the wallet address so we can recover funds if disconnected
+    if (embeddedWallet?.address) {
+      setWalletAddress(embeddedWallet.address);
+    }
   };
 
   const handleLeave = () => {
     setLocalAgentId(null);
+    setWalletAddress(null);
     setDisconnected(false);
+    setRefundResult(null);
   };
 
   if (error) {
@@ -145,23 +169,58 @@ export default function TablePage() {
         </Link>
       </div>
       {disconnected && localAgentId && (
-        <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-3 mb-4 text-center">
+        <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-4 mb-4 text-center">
           <p className="text-red-400 text-sm font-medium mb-1">
             Connection to table lost
           </p>
-          <p className="text-gray-400 text-xs mb-2">
+          <p className="text-gray-400 text-xs mb-3">
             Your agent was removed from the table (likely due to a server restart).
             Your escrowed funds are safe in the smart contract.
           </p>
-          <button
-            onClick={() => {
-              setLocalAgentId(null);
-              setDisconnected(false);
-            }}
-            className="px-4 py-1.5 text-xs font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition cursor-pointer"
-          >
-            Re-join Table
-          </button>
+          {refundResult && (
+            <p className="text-emerald-400 text-xs mb-3">{refundResult}</p>
+          )}
+          <div className="flex gap-2 justify-center">
+            {walletAddress && !refundResult && (
+              <button
+                onClick={async () => {
+                  setIsRefunding(true);
+                  try {
+                    const res = await fetch(`/api/tables/${id}/emergency-refund`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ walletAddress }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      setRefundResult(`Funds returned successfully! Tx: ${data.txHash?.slice(0, 10)}...`);
+                    } else {
+                      setRefundResult(data.error || 'Refund failed — contact support');
+                    }
+                  } catch {
+                    setRefundResult('Network error — try again');
+                  } finally {
+                    setIsRefunding(false);
+                  }
+                }}
+                disabled={isRefunding}
+                className="px-4 py-1.5 text-xs font-medium bg-yellow-600/20 text-yellow-400 border border-yellow-500/30 rounded-lg hover:bg-yellow-600/30 transition cursor-pointer disabled:opacity-50"
+              >
+                {isRefunding ? 'Withdrawing...' : 'Withdraw Funds'}
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setLocalAgentId(null);
+                setWalletAddress(null);
+                setDisconnected(false);
+                setRefundResult(null);
+              }}
+              className="px-4 py-1.5 text-xs font-medium bg-gray-600/20 text-gray-400 border border-gray-500/30 rounded-lg hover:bg-gray-600/30 transition cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
       <PokerTable

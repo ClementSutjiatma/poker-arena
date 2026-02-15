@@ -182,6 +182,16 @@ export default function BuyInModal({
     }
   }, [isDepositConfirmed, step, handleRegister]);
 
+  // Auto-close modal after success with a short delay
+  useEffect(() => {
+    if (step === 'done') {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [step, onClose]);
+
   if (!walletAddress) {
     return (
       <ModalOverlay onClose={onClose}>
@@ -242,7 +252,9 @@ export default function BuyInModal({
 
       {step === 'approving' && (
         <StepIndicator
-          label="Approving aUSD..."
+          stepNumber={1}
+          totalSteps={3}
+          label="Approving aUSD spend..."
           sublabel={isApprovePending ? 'Confirm in wallet' : isApproveConfirming ? 'Waiting for confirmation' : ''}
           loading
         />
@@ -250,6 +262,8 @@ export default function BuyInModal({
 
       {step === 'depositing' && (
         <StepIndicator
+          stepNumber={2}
+          totalSteps={3}
           label={isRebuy ? 'Re-buying...' : 'Depositing to escrow...'}
           sublabel={isDepositPending ? 'Confirm in wallet' : isDepositConfirming ? 'Waiting for confirmation' : ''}
           loading
@@ -257,7 +271,7 @@ export default function BuyInModal({
       )}
 
       {step === 'registering' && (
-        <StepIndicator label="Registering at table..." sublabel="" loading />
+        <StepIndicator stepNumber={3} totalSteps={3} label="Registering at table..." sublabel="" loading />
       )}
 
       {step === 'done' && (
@@ -320,11 +334,28 @@ function ModalOverlay({
   );
 }
 
-function StepIndicator({ label, sublabel, loading }: { label: string; sublabel: string; loading?: boolean }) {
+function StepIndicator({ stepNumber, totalSteps, label, sublabel, loading }: { stepNumber?: number; totalSteps?: number; label: string; sublabel: string; loading?: boolean }) {
   return (
     <div className="text-center py-6">
+      {stepNumber && totalSteps && (
+        <div className="flex justify-center gap-1.5 mb-4">
+          {Array.from({ length: totalSteps }, (_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${
+                i < stepNumber
+                  ? 'w-8 bg-emerald-400'
+                  : 'w-8 bg-gray-700'
+              }`}
+            />
+          ))}
+        </div>
+      )}
       {loading && (
         <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+      )}
+      {stepNumber && totalSteps && (
+        <p className="text-[10px] text-gray-500 mb-1">Step {stepNumber} of {totalSteps}</p>
       )}
       <p className="text-white font-medium">{label}</p>
       {sublabel && <p className="text-xs text-gray-500 mt-1">{sublabel}</p>}
